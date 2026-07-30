@@ -1,0 +1,20 @@
+[
+  { "key": "contract_sign", "name": "签订合同", "order": 1, "deptId": 1, "dependsOn": null, "parentKey": null },
+  { "key": "deposit_confirm", "name": "财务确认定金", "order": 2, "deptId": 3, "dependsOn": "contract_sign", "parentKey": null },
+  { "key": "manufacturing_approval", "name": "制造审批", "order": 3, "deptId": 10, "dependsOn": "deposit_confirm", "parentKey": null },
+  { "key": "gm_sign", "name": "总经理签字", "order": 4, "deptId": null, "dependsOn": "manufacturing_approval", "parentKey": null },
+  { "key": "production_order", "name": "销售下生产任务单", "order": 5, "deptId": 1, "dependsOn": "gm_sign", "parentKey": null },
+  { "key": "technical_design", "name": "技术设计", "order": 6, "deptId": 4, "dependsOn": "production_order", "parentKey": "production" },
+  { "key": "purchase_plan", "name": "采购计划制定", "order": 7, "deptId": 5, "dependsOn": "technical_design", "parentKey": "production" },
+  { "key": "material_check", "name": "物料比对", "order": 8, "deptId": 5, "dependsOn": "purchase_plan", "parentKey": "production" },
+  { "key": "purchase_frame", "name": "机架采购", "order": 9, "deptId": 5, "dependsOn": "material_check", "parentKey": "production" },
+  { "key": "purchase_mold_frame", "name": "模架采购", "order": 10, "deptId": 5, "dependsOn": "material_check", "parentKey": "production" },
+  { "key": "purchase_electrical", "name": "电气采购", "order": 11, "deptId": 5, "dependsOn": "material_check", "parentKey": "production" },
+  { "key": "purchase_cover", "name": "外罩采购", "order": 12, "deptId": 5, "dependsOn": "material_check", "parentKey": "production" },
+  { "key": "material_in", "name": "物料进仓", "order": 13, "deptId": 6, "dependsOn": "purchase_frame,purchase_mold_frame,purchase_electrical,purchase_cover", "parentKey": "production" },
+  { "key": "warehouse_prepare", "name": "仓库配料", "order": 14, "deptId": 6, "dependsOn": "material_in", "parentKey": "production" },
+  { "key": "assembly", "name": "装配", "order": 15, "deptId": 7, "dependsOn": "warehouse_prepare", "parentKey": "production" },
+  { "key": "debug", "name": "调试", "order": 16, "deptId": 8, "dependsOn": "assembly", "parentKey": "production" },
+  { "key": "inspection", "name": "验货入库", "order": 17, "deptId": 6, "dependsOn": "debug", "parentKey": null },
+  { "key": "shipping", "name": "发货", "order": 18, "deptId": 9, "dependsOn": "inspection", "parentKey": null }
+]

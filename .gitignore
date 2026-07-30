@@ -1,0 +1,16 @@
+node_modules/
+data.db
+backups/
+.env
+.npm-cache/
+*.log
+logs/
+!.env.exampleuploads/
+*.pem
+screenshot.png
+test_api.js
+check_*.js
+migrate_*.js
+test_export.xlsx
+server_output.log
+0

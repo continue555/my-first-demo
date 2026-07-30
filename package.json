@@ -1,0 +1,28 @@
+{
+  "name": "blowing-machine-management",
+  "version": "1.0.0",
+  "description": "吹瓶机机械制造公司管理系统",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js",
+    "prod": "pm2 start ecosystem.config.js",
+    "backup": "node backup.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^17.4.2",
+    "exceljs": "^4.4.0",
+    "express": "^4.18.2",
+    "express-async-errors": "^3.1.1",
+    "jsonwebtoken": "^9.0.2",
+    "multer": "^2.2.0",
+    "pg": "^8.22.0",
+    "playwright": "^1.62.0",
+    "sql.js": "^1.10.0",
+    "ssh2": "^1.17.0",
+    "xlsx": "^0.18.5",
+    "xlsx-populate": "^1.21.0"
+  }
+}
