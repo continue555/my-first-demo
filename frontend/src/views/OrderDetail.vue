@@ -640,7 +640,7 @@ onUnmounted(() => {
   border: 1px solid #fde68a;
   border-radius: 999px;
   text-align: center;
-  letter-spacing: 0.04em;
+  letter-spacing: 0;
 }
 .detail-state {
   padding: 64px 20px;

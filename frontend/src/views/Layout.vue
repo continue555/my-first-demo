@@ -218,7 +218,7 @@ onUnmounted(() => {
   z-index: 100; display: flex; flex-direction: column;
 }
 .sidebar-header { padding: 20px; border-bottom: 1px solid rgba(255,255,255,0.1); }
-.sidebar-header h2 { font-size: 17px; font-weight: 700; letter-spacing: 0.02em; }
+.sidebar-header h2 { font-size: 17px; font-weight: 700; letter-spacing: 0; }
 .dept-tag {
   display: inline-block; margin-top: 6px; padding: 2px 10px;
   background: rgba(255,255,255,0.15); border-radius: 12px; font-size: 12px;
