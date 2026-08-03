@@ -382,6 +382,7 @@ async function updateStage(user, id, stageKey, body) {
         await db.prepare(`
           INSERT INTO notifications (order_id, message, recipient_dept_id, source_key)
           VALUES (?, ?, ?, ?)
+          ON CONFLICT (source_key) WHERE source_key IS NOT NULL DO NOTHING
         `).run(id, `订单 ${order.order_no} 的"${stageDef.name}"已完成，请开始"${nextStage.name}"`, nextStage.deptId, `stage_completed:${id}:${stageKey}:${nextStage.key}`);
       }
     });
