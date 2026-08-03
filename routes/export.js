@@ -168,6 +168,18 @@ function getImageType(mime) {
   return null;
 }
 
+function getFileTypeLabel(f) {
+  const name = (f.original_name || '').toLowerCase();
+  const mime = f.mime_type || '';
+  if (mime.startsWith('image/')) return null;
+  if (mime.includes('word') || name.endsWith('.doc') || name.endsWith('.docx')) return 'Word 文档';
+  if (mime.includes('pdf') || name.endsWith('.pdf')) return 'PDF 文档';
+  if (mime.includes('sheet') || mime.includes('excel') || name.endsWith('.xls') || name.endsWith('.xlsx') || name.endsWith('.csv')) return 'Excel 表格';
+  if (mime.startsWith('text/') || name.endsWith('.txt')) return '文本文件';
+  if (mime.includes('zip') || mime.includes('rar') || name.endsWith('.zip') || name.endsWith('.rar')) return '压缩包';
+  return '其他文件';
+}
+
 function getImageDimensions(buf, mime) {
   try {
     if (mime.includes('png')) return { w: buf.readUInt32BE(16), h: buf.readUInt32BE(20) };
@@ -244,6 +256,15 @@ function writeFileRows(ws, rowIdx, files, downloadBase, userId, workbook) {
     }
 
     // 下载链接
+    const fileLabel = getFileTypeLabel(f);
+    if (fileLabel) {
+      const cell = row.getCell(6);
+      cell.value = fileLabel;
+      cell.font = { bold: true, color: { argb: 'FF475569' } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+      cell.alignment = { horizontal: 'left' };
+    }
+
     const dl = downloadBase + '/api/files/' + f.id + '/download?ticket=' + createDownloadTicket(f.id, userId);
     row.getCell(7).value = { text: '下载', hyperlink: dl };
     row.getCell(7).font = { underline: true, color: { argb: 'FF2563eb' } };
@@ -702,6 +723,15 @@ router.get('/order/:id', authMiddleware, requireRole('admin', 'management'), asy
             }
           } catch (e) { console.error('[Export] 图片嵌入异常:', e.message, '文件:', f.stored_name); }
         }
+      }
+
+      const fileLabel = getFileTypeLabel(f);
+      if (fileLabel) {
+        const cell = row.getCell(6);
+        cell.value = fileLabel;
+        cell.font = { bold: true, color: { argb: 'FF475569' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFE2E8F0' } };
+        cell.alignment = { horizontal: 'left' };
       }
 
       const dl = downloadBase + '/api/files/' + f.id + '/download?ticket=' + createDownloadTicket(f.id, req.user.id);
