@@ -7,6 +7,7 @@ const { authMiddleware, requireRole } = require('../middleware/auth');
 const { createDownloadTicket } = require('../lib/download-ticket');
 const STATUS_LABELS = require('../shared/status-labels.json');
 const { getOverdueInfo } = require('../lib/overdue');
+const { parse, exportJobSchema } = require('../lib/validators');
 
 const router = express.Router();
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
@@ -570,7 +571,9 @@ router.get('/orders/batch', authMiddleware, requireRole('admin', 'management'), 
 router.post('/jobs', authMiddleware, requireRole('admin', 'management'), async (req, res) => {
   const db = getDb();
   const downloadBase = req.protocol + '://' + req.get('host');
-  const { status, ids } = req.body || {};
+  const parsed = parse(exportJobSchema, req.body || {});
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+  const { status, ids } = parsed.data;
   const validStatuses = ['pending', 'in_progress', 'completed', 'delayed'];
   if (status && !validStatuses.includes(status)) {
     return res.status(400).json({ error: '不支持的订单状态' });

@@ -3,16 +3,10 @@ const bcrypt = require('bcryptjs');
 const { getDb, logAudit } = require('../database');
 const { generateToken, authMiddleware, requireRole, getChildDeptIds } = require('../middleware/auth');
 const sanitize = require('../lib/sanitize');
+const { parse, registerSchema, changePasswordSchema, resetPasswordSchema, updateUserSchema } = require('../lib/validators');
 const crypto = require('crypto');
 
 const router = express.Router();
-
-const ALLOWED_ROLES = ['admin', 'management', 'sales', 'production', 'finance', 'mold', 'material_follow'];
-
-function validatePassword(pwd) {
-  if (!pwd || pwd.length < 6) return '密码至少6位';
-  return null;
-}
 
 // ===== 登录限流 =====
 const MAX_ATTEMPTS = 5;
@@ -160,11 +154,9 @@ router.get('/users', authMiddleware, requireRole('admin'), async (req, res) => {
 });
 
 router.put('/change-password', authMiddleware, async (req, res) => {
-  const { oldPassword, newPassword } = req.body;
-  if (!oldPassword || !newPassword) return res.status(400).json({ error: '请填写完整信息' });
-
-  const pwdErr = validatePassword(newPassword);
-  if (pwdErr) return res.status(400).json({ error: pwdErr });
+  const parsed = parse(changePasswordSchema, req.body);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+  const { oldPassword, newPassword } = parsed.data;
 
   const db = getDb();
   const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.user.id);
@@ -178,14 +170,12 @@ router.put('/change-password', authMiddleware, async (req, res) => {
 
 // 新增用户
 router.post('/register', authMiddleware, requireRole('admin'), async (req, res) => {
-  const { username, password, name, department_id, role } = req.body;
-  if (!ALLOWED_ROLES.includes(role)) return res.status(400).json({ error: '不支持的角色类型' });
-  if (!username || !password || !name || !role) return res.status(400).json({ error: '请填写完整信息' });
+  const parsed = parse(registerSchema, req.body);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+  const { username, password, name, department_id, role } = parsed.data;
 
   const cleanUsername = sanitize(username);
   const cleanName = sanitize(name);
-  const pwdErr = validatePassword(password);
-  if (pwdErr) return res.status(400).json({ error: pwdErr });
 
   const db = getDb();
   const exist = await db.prepare('SELECT id FROM users WHERE username = ?').get(cleanUsername);
@@ -215,8 +205,9 @@ router.delete('/users/:id', authMiddleware, requireRole('admin'), async (req, re
 
 // 修改用户信息
 router.put('/users/:id', authMiddleware, requireRole('admin'), async (req, res) => {
-  const { name, department_id, role } = req.body;
-  if (role && !ALLOWED_ROLES.includes(role)) return res.status(400).json({ error: '不支持的角色类型' });
+  const parsed = parse(updateUserSchema, req.body);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+  const { name, department_id, role } = parsed.data;
 
   const cleanName = name ? sanitize(name) : undefined;
 
@@ -232,11 +223,9 @@ router.put('/users/:id', authMiddleware, requireRole('admin'), async (req, res) 
 
 // 管理员重置用户密码
 router.put('/users/:id/reset-password', authMiddleware, requireRole('admin'), async (req, res) => {
-  const { newPassword } = req.body;
-  if (!newPassword) return res.status(400).json({ error: '请输入新密码' });
-
-  const pwdErr = validatePassword(newPassword);
-  if (pwdErr) return res.status(400).json({ error: pwdErr });
+  const parsed = parse(resetPasswordSchema, req.body);
+  if (parsed.error) return res.status(400).json({ error: parsed.error });
+  const { newPassword } = parsed.data;
 
   const db = getDb();
   const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);

@@ -55,6 +55,7 @@ conn.on('ready', () => {
 
     try {
       const root = process.cwd();
+      await run(`mkdir -p ${BASE}/releases && cd ${BASE} && tar --exclude=node_modules --exclude=uploads --exclude=releases --exclude=.env --exclude=.git --exclude=.npm-cache --exclude=server_output.log -cf releases/pre-upload-$(date +%Y%m%d%H%M%S).tar .`);
       await uploadDir(path.join(root, 'public'), `${BASE}/public`);
       await uploadDir(path.join(root, 'frontend', 'src'), `${BASE}/frontend/src`);
       await uploadDir(path.join(root, 'migrations'), `${BASE}/migrations`);
@@ -86,6 +87,8 @@ conn.on('ready', () => {
         ['routes/orders-files.js', `${BASE}/routes/orders-files.js`],
         ['routes/orders.js', `${BASE}/routes/orders.js`],
         ['services/order-service.js', `${BASE}/services/order-service.js`],
+        ['services/audit-service.js', `${BASE}/services/audit-service.js`],
+        ['services/notifications-service.js', `${BASE}/services/notifications-service.js`],
         ['middleware/async-handler.js', `${BASE}/middleware/async-handler.js`],
         ['middleware/auth.js', `${BASE}/middleware/auth.js`],
         ['middleware/csrf.js', `${BASE}/middleware/csrf.js`],
@@ -94,6 +97,7 @@ conn.on('ready', () => {
         ['lib/file-permissions.js', `${BASE}/lib/file-permissions.js`],
         ['lib/dept-filter.js', `${BASE}/lib/dept-filter.js`],
         ['lib/stage-permissions.js', `${BASE}/lib/stage-permissions.js`],
+        ['lib/validators.js', `${BASE}/lib/validators.js`],
         ['lib/cookies.js', `${BASE}/lib/cookies.js`],
         ['lib/download-ticket.js', `${BASE}/lib/download-ticket.js`],
         ['lib/stale-asset-map.json', `${BASE}/lib/stale-asset-map.json`],
@@ -101,6 +105,9 @@ conn.on('ready', () => {
         ['shared/status-labels.json', `${BASE}/shared/status-labels.json`],
         ['shared/role-labels.json', `${BASE}/shared/role-labels.json`],
         ['scripts/restore-drill.sh', `${BASE}/scripts/restore-drill.sh`],
+        ['scripts/health-check.sh', `${BASE}/scripts/health-check.sh`],
+        ['scripts/install-crons.sh', `${BASE}/scripts/install-crons.sh`],
+        ['scripts/log-query.sh', `${BASE}/scripts/log-query.sh`],
         ['deploy/deploy.sh', `${BASE}/deploy/deploy.sh`],
         ['deploy/server-deploy.sh', `${BASE}/deploy/server-deploy.sh`],
         ['deploy/rollback.sh', `${BASE}/deploy/rollback.sh`],

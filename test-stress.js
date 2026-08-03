@@ -47,8 +47,27 @@ async function main() {
   const created = results.find(r => r.status === 201);
   if (created.body.orderId) createdIds.push(created.body.orderId);
 
-  console.log('=== 批量导出 20 单 ===');
-  for (let i = 0; i < 20; i++) {
+  console.log('=== 并发阶段推进 ===');
+  const stageOrder = await req('POST', '/api/orders', {
+    order_no: 'STAGE-' + Date.now(),
+    customer_name: 'Stage', project_name: 'Stage', planned_delivery_date: '2026-08-10'
+  });
+  if (stageOrder.status !== 201 || !stageOrder.body.orderId) throw new Error('stage order create failed');
+  const soid = stageOrder.body.orderId;
+  createdIds.push(soid);
+  await req('PUT', `/api/orders/${soid}/stages/contract_sign/time`, { start_date: '2026-08-01T09:00', planned_end_date: '2026-08-02T09:00' });
+  const starts = await Promise.all(Array.from({ length: 5 }, () => req('PUT', `/api/orders/${soid}/stages/contract_sign`, { status: 'in_progress' })));
+  if (starts.some(r => r.status === 500)) throw new Error('concurrent stage start produced 500');
+  await req('PUT', `/api/orders/${soid}/stages/contract_sign`, { status: 'completed' });
+  const comps = await Promise.all(Array.from({ length: 5 }, () => req('PUT', `/api/orders/${soid}/stages/contract_sign`, { status: 'completed' })));
+  if (comps.some(r => r.status === 500)) throw new Error('concurrent stage complete produced 500');
+  const stageDetail = await req('GET', `/api/orders/${soid}`);
+  const stage = (stageDetail.body.stages || []).find(s => s.stage_key === 'contract_sign');
+  console.log('concurrent stage final status:', stage && stage.status);
+  if (!stage || stage.status !== 'completed') throw new Error('stage final status not completed');
+
+  console.log('=== 批量导出 50 单 ===');
+  for (let i = 0; i < 50; i++) {
     const r = await req('POST', '/api/orders', {
       order_no: 'STRESS-' + Date.now() + '-' + i,
       customer_name: 'Stress', project_name: 'Stress', planned_delivery_date: '2026-08-10'
@@ -57,7 +76,7 @@ async function main() {
     createdIds.push(r.body.orderId);
   }
 
-  const job = await req('POST', '/api/export/jobs', { ids: createdIds.slice(0, 20) });
+  const job = await req('POST', '/api/export/jobs', { ids: createdIds.slice(0, 50) });
   if (job.status !== 202 || !job.body.jobId) throw new Error('job create failed');
   let done = false;
   for (let i = 0; i < 40; i++) {
@@ -76,7 +95,7 @@ async function main() {
   await wb.xlsx.load(Buffer.from(await dl.arrayBuffer()));
   const sheet = wb.worksheets[0];
   console.log('export order rows:', sheet.rowCount);
-  if (sheet.rowCount < 21) throw new Error('export row count too small');
+  if (sheet.rowCount < 51) throw new Error('export row count too small');
 
   for (const id of createdIds) {
     await req('DELETE', '/api/orders/' + id).catch(() => {});

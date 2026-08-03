@@ -26,7 +26,14 @@ echo "[server-deploy] build frontend"
 echo "[server-deploy] restart"
 export PATH="$PATH:$(npm config get prefix)/bin"
 pm2 restart blowing-machine
-sleep 3
+
+echo "[server-deploy] wait for health"
+for i in $(seq 1 30); do
+  if curl -fs --max-time 3 "http://127.0.0.1:${PORT:-3000}/api/health" >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
 
 echo "[server-deploy] tests"
 if ! node test-api.js; then
