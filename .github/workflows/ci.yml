@@ -63,3 +63,65 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run build
+
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: blowing_machine
+          POSTGRES_USER: blowing
+          POSTGRES_PASSWORD: blowing123
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U blowing -d blowing_machine"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      PORT: 3000
+      JWT_SECRET: 61d0ae79ba91c14561b0806e5700e732c6d0d81f02495f3ca5aa758b4f57944f
+      PG_HOST: 127.0.0.1
+      PG_PORT: 5432
+      PG_DATABASE: blowing_machine
+      PG_USER: blowing
+      PG_PASSWORD: blowing123
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - name: Run E2E tests
+        run: |
+          node server.js &
+          for i in $(seq 1 30); do
+            curl -fs http://127.0.0.1:3000/api/health && break
+            sleep 1
+          done
+          node e2e/run-e2e.js
+          status=$?
+          kill %1 2>/dev/null || true
+          exit $status
+
+  security-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Backend npm audit
+        continue-on-error: true
+        run: npm audit --audit-level=high
+      - name: Frontend npm audit
+        continue-on-error: true
+        working-directory: frontend
+        run: npm ci && npm audit --audit-level=high
