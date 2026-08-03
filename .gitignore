@@ -14,3 +14,4 @@ migrate_*.js
 test_export.xlsx
 server_output.log
 0
+releases/

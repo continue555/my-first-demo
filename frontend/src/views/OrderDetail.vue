@@ -395,10 +395,17 @@ async function previewDocument(file) {
       }, 600);
       window.addEventListener('resize', onPreviewResize);
     } else if (type === 'excel') {
-      const XLSX = await import('xlsx');
-      const wb = XLSX.read(await res.arrayBuffer());
-      const sheet = wb.Sheets[wb.SheetNames[0]];
-      docPreviewBody.value.innerHTML = XLSX.utils.sheet_to_html(sheet);
+      const name = (file.original_name || '').toLowerCase();
+      if (name.endsWith('.csv')) {
+        docPreviewBody.value.textContent = await res.text();
+      } else if (name.endsWith('.xlsx')) {
+        const readXlsxFile = (await import('read-excel-file')).default;
+        const rows = await readXlsxFile(await res.arrayBuffer());
+        const esc = v => String(v ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+        docPreviewBody.value.innerHTML = '<table><tbody>' + rows.map(r => '<tr>' + r.map(c => '<td>' + esc(c) + '</td>').join('') + '</tr>').join('') + '</tbody></table>';
+      } else {
+        docPreviewBody.value.innerHTML = '<div style="text-align:center;color:var(--text-secondary);padding:40px 0;">旧版 Excel 文件暂不支持在线预览，请下载后查看</div>';
+      }
     } else if (type === 'text') {
       docPreviewBody.value.textContent = await res.text();
     }

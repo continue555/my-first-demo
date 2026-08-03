@@ -429,4 +429,8 @@ async function updateStageTime(user, id, stageKey, body) {
 
   return { status: 200, body: { message: '时间更新成功' } };
 }
-module.exports = { listOrders, getStats, createOrder, getOrder, updateOrder, deleteOrder, updateStage, updateStageTime, STAGE_DEFINITIONS };
+module.exports = {
+  listOrders, getStats, createOrder, getOrder, updateOrder, deleteOrder, updateStage, updateStageTime,
+  cleanText, validateDate, validateStageDateTime, validateOrderInput, generateOrderNo,
+  STAGE_DEFINITIONS
+};

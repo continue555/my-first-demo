@@ -59,9 +59,11 @@ conn.on('ready', () => {
       await uploadDir(path.join(root, 'frontend', 'src'), `${BASE}/frontend/src`);
       await uploadDir(path.join(root, 'migrations'), `${BASE}/migrations`);
       await mkdir(`${BASE}/services`);
+      await mkdir(`${BASE}/scripts`);
       const files = [
         ['frontend/index.html', `${BASE}/frontend/index.html`],
         ['frontend/package.json', `${BASE}/frontend/package.json`],
+        ['frontend/package-lock.json', `${BASE}/frontend/package-lock.json`],
         ['frontend/vite.config.js', `${BASE}/frontend/vite.config.js`],
         ['public/index.html', `${BASE}/public/index.html`],
         ['server.js', `${BASE}/server.js`],
@@ -98,7 +100,10 @@ conn.on('ready', () => {
         ['shared/stage-defs.json', `${BASE}/shared/stage-defs.json`],
         ['shared/status-labels.json', `${BASE}/shared/status-labels.json`],
         ['shared/role-labels.json', `${BASE}/shared/role-labels.json`],
+        ['scripts/restore-drill.sh', `${BASE}/scripts/restore-drill.sh`],
         ['deploy/deploy.sh', `${BASE}/deploy/deploy.sh`],
+        ['deploy/server-deploy.sh', `${BASE}/deploy/server-deploy.sh`],
+        ['deploy/rollback.sh', `${BASE}/deploy/rollback.sh`],
         ['deploy/nginx.conf', `${BASE}/deploy/nginx.conf`],
         ['deploy/nginx-http.conf', `${BASE}/deploy/nginx-http.conf`],
         ['deploy/blowing-machine-https.conf', `${BASE}/deploy/blowing-machine-https.conf`],
@@ -110,20 +115,14 @@ conn.on('ready', () => {
 
       console.log('uploads done');
 
-      const restart = await run(
-        `export PATH="$PATH:$(npm config get prefix)/bin"; cd ${BASE} && pm2 restart blowing-machine`
-      );
-      console.log('restart code:', restart.code, restart.out.trim(), restart.errOut.trim());
-
-      await new Promise(resolve => setTimeout(resolve, 2500));
-
-      const tests = await run(`cd ${BASE} && node test-api.js`);
-      console.log('tests code:', tests.code);
-      console.log(tests.out);
-      if (tests.errOut.trim()) console.log('tests stderr:', tests.errOut.trim());
+      const installFlag = process.env.DEPLOY_INSTALL ? ' --install' : '';
+      const deploy = await run(`cd ${BASE} && bash deploy/server-deploy.sh${installFlag}`);
+      console.log('server-deploy code:', deploy.code);
+      console.log(deploy.out);
+      if (deploy.errOut.trim()) console.log('server-deploy stderr:', deploy.errOut.trim());
 
       conn.end();
-      process.exit(tests.code || 0);
+      process.exit(deploy.code || 0);
     } catch (e) {
       console.error('DEPLOY_ERROR', e.stack || e.message);
       conn.end();
