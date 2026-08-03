@@ -1,0 +1,47 @@
+# 项目状态快照
+
+> 用途：供长时间会话压缩后快速恢复上下文。更新日期：2026-08-03。
+
+## 当前状态
+
+- 生产：http://42.194.139.7，PM2 `blowing-machine`，线上 API 测试 50/50 通过
+- 技术栈：Node.js + Express + PostgreSQL、Vue 3 + Vite 7、Pinia、ExcelJS、zod、docx-preview、read-excel-file
+- GitHub：continue555/my-first-demo，master 分支，CI 六任务全绿
+- 部署：`deploy-remote.js` 上传 → 服务器 `deploy/server-deploy.sh` 备份/构建/重启/测试/自动回滚
+- 定时任务已装：每日备份、每 5 分钟健康检查、每周恢复演练
+
+## 关键命令
+
+- 单元测试：`npm run test:unit`；覆盖率：`npm run test:coverage`
+- API 测试：`npm test`；压力测试：`npm run test:stress`
+- 前端构建：`cd frontend && npm run build`
+- 部署：`$env:SSH_PASS=...; node deploy-remote.js`（首次/依赖变更加 `$env:DEPLOY_INSTALL='1'`）
+- 服务器端：`bash deploy/server-deploy.sh`、`bash deploy/rollback.sh <时间戳>`、`bash scripts/restore-drill.sh`、`bash scripts/health-check.sh`、`bash scripts/log-query.sh <关键字>`
+
+## 近期完成（2026-08-03）
+
+- 移动端体验：底部导航、订单卡片、筛选保留、预览全屏
+- 安全：HttpOnly Cookie + CSRF、限流持久化、角色白名单、附件权限、参数校验、stats 接口按角色限制
+- 测试：API 50 项、单元 19 项、压力测试（并发建单/阶段推进/50 单导出）、E2E、依赖审计
+- 并发修复：阶段完成通知插入改为 `ON CONFLICT DO NOTHING`
+- 依赖：xlsx 已替换为 read-excel-file；Vite 升级 7.3.6，前端审计 0 漏洞；zod 接入关键写接口
+- 架构：订单/审计/通知业务已拆 service；结构化日志
+- 运维：恢复演练、服务器端部署与回滚、健康检查、定时任务、日志查询
+- 文档：操作文档已与系统同步
+
+## 待办/注意事项
+
+- 历史一次性脚本（check_db/check_order/migrate_stages/migrate_to_pg）和 Docker 文件：用户明确保留，不删
+- `MONITOR_WEBHOOK` 未配置，配置后健康检查失败可推送告警
+- 后端仍剩 2 个中危（exceljs → uuid），修复需破坏性降级，暂缓
+- 真机（iOS/Android/微信）兼容性未做长期验证
+- 备份“恢复演练”已通过一次，建议每周由定时任务持续验证
+
+## 架构速览
+
+- `services/`：order-service、audit-service、notifications-service
+- `routes/`：薄路由；auth/orders-files/export 仍含部分业务，可继续拆分
+- `lib/`：overdue、sanitize、stage-permissions、validators(zod)、download-ticket、file-permissions、cookies、dept-filter
+- `migrations/`：PostgreSQL 自动迁移（15 个版本）
+- `e2e/`、`tests/`：Playwright E2E、Node 单元测试
+- `deploy/`：server-deploy.sh、rollback.sh；`scripts/`：restore-drill、health-check、install-crons、log-query
