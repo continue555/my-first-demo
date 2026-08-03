@@ -33,6 +33,12 @@ async function login(page, username, password) {
   const desktop = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   const page = await desktop.newPage();
   track(page);
+  let createResp = null;
+  page.on('response', r => {
+    if (r.url().includes('/api/orders') && r.request().method() === 'POST') {
+      r.text().then(t => { createResp = { status: r.status(), body: t }; }).catch(() => {});
+    }
+  });
 
   await check('admin login', async () => {
     await login(page, 'admin', '123456');
@@ -42,16 +48,22 @@ async function login(page, username, password) {
 
   const orderNo = 'E2E-' + Date.now();
   await check('create order via UI', async () => {
-    await page.goto(BASE + '/orders', { waitUntil: 'domcontentloaded', timeout: 45000 });
-    await page.waitForSelector('.page-header .btn-primary', { timeout: 30000 });
-    await page.locator('.page-header .btn-primary').click();
-    await page.waitForSelector('.modal', { timeout: 10000 });
-    await page.locator('.modal input[type=text]').fill(orderNo);
-    await page.locator('.modal input[type=date]').fill('2026-08-30');
-    await page.locator('.modal .modal-actions .btn-primary').click();
-    await page.waitForSelector('.order-card, .table-wrapper', { timeout: 30000 });
-    const card = page.locator('.order-card', { hasText: orderNo });
-    if ((await card.count()) === 0) throw new Error('order card not found');
+    try {
+      await page.goto(BASE + '/orders', { waitUntil: 'domcontentloaded', timeout: 45000 });
+      await page.waitForSelector('.page-header .btn-primary', { timeout: 30000 });
+      await page.locator('.page-header .btn-primary').click();
+      await page.waitForSelector('.modal', { timeout: 10000 });
+      await page.locator('.modal input[type=text]').fill(orderNo);
+      await page.locator('.modal input[type=date]').fill('2026-08-30');
+      await page.locator('.modal .modal-actions .btn-primary').click();
+      await page.waitForSelector('.modal', { state: 'detached', timeout: 15000 }).catch(() => {});
+      await page.waitForSelector('.order-card, .table-wrapper', { timeout: 30000 });
+      const card = page.locator('.order-card', { hasText: orderNo });
+      if ((await card.count()) === 0) throw new Error('order card not found');
+    } catch (e) {
+      const extra = await page.evaluate(() => ({ modal: !!document.querySelector('.modal'), body: (document.body.innerText || '').slice(0, 300) })).catch(() => ({}));
+      throw new Error(e.message + ' | api=' + JSON.stringify(createResp) + ' | state=' + JSON.stringify(extra));
+    }
   });
 
   await check('open order detail and back', async () => {
