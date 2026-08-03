@@ -120,8 +120,12 @@ async function checkDependency(orderId, stageKey) {
 
 async function listOrders(query) {
   const db = getDb();
-  const { search, status, startDate, endDate, page = 1, limit = 20 } = query;
-  const offset = (parseInt(page) - 1) * parseInt(limit);
+  const { search, status, startDate, endDate } = query;
+  const rawPage = parseInt(query.page, 10);
+  const rawLimit = parseInt(query.limit, 10);
+  const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
+  const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : 20;
+  const offset = (page - 1) * limit;
 
   let where = 'WHERE 1=1';
   const params = [];

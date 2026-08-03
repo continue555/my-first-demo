@@ -9,6 +9,8 @@ const router = express.Router();
 router.get('/', authMiddleware, async (req, res) => {
   const db = getDb();
   const { unread, limit } = req.query;
+  const rawLimit = parseInt(limit, 10);
+  const safeLimit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
   const userId = req.user.id;
 
   let where = 'WHERE 1=1';
@@ -31,7 +33,7 @@ router.get('/', authMiddleware, async (req, res) => {
     ${where}
     ORDER BY n.created_at DESC
     LIMIT ?
-  `).all(userId, ...params, parseInt(limit) || 50);
+  `).all(userId, ...params, safeLimit);
 
   let unreadWhere = 'WHERE NOT EXISTS (SELECT 1 FROM notification_reads nr WHERE nr.notification_id = n.id AND nr.user_id = ?)';
   const unreadParams = [userId];
