@@ -1,15 +1,11 @@
 ﻿const express = require('express');
 const bcrypt = require('bcryptjs');
 const { getDb, logAudit } = require('../database');
-const { generateToken, authMiddleware, requireRole } = require('../middleware/auth');
+const { generateToken, authMiddleware, requireRole, getChildDeptIds } = require('../middleware/auth');
+const sanitize = require('../lib/sanitize');
+const crypto = require('crypto');
 
 const router = express.Router();
-
-// ===== 输入校验 =====
-function sanitize(str) {
-  if (!str) return '';
-  return String(str).replace(/[<>"']/g, '').slice(0, 200);
-}
 
 function validatePassword(pwd) {
   if (!pwd || pwd.length < 6) return '密码至少6位';
@@ -17,7 +13,6 @@ function validatePassword(pwd) {
 }
 
 // ===== 登录限流 =====
-const rateLimitMap = new Map(); // key: username_ip, value: { count, firstTime, lockedUntil }
 const MAX_ATTEMPTS = 5;
 const LOCK_TIME = 15 * 60 * 1000; // 15分钟
 
@@ -25,58 +20,63 @@ function getRateLimitKey(username, ip) {
   return `${username}_${ip}`;
 }
 
-function checkRateLimit(username, ip) {
+async function checkRateLimit(username, ip) {
+  const db = getDb();
   const key = getRateLimitKey(username, ip);
-  const record = rateLimitMap.get(key);
+  const record = await db.prepare('SELECT * FROM login_attempts WHERE attempt_key = ?').get(key);
   const now = Date.now();
 
   if (!record) return null;
 
-  if (record.lockedUntil && now < record.lockedUntil) {
-    const remaining = Math.ceil((record.lockedUntil - now) / 1000 / 60);
+  if (record.locked_until && now < Number(record.locked_until)) {
+    const remaining = Math.ceil((Number(record.locked_until) - now) / 1000 / 60);
     return `账号已锁定，请${remaining}分钟后重试`;
   }
 
-  if (record.lockedUntil && now >= record.lockedUntil) {
-    rateLimitMap.delete(key);
+  if (record.locked_until && now >= Number(record.locked_until)) {
+    await db.prepare('DELETE FROM login_attempts WHERE attempt_key = ?').run(key);
     return null;
   }
 
   return null;
 }
 
-function recordFailedAttempt(username, ip) {
-  const key = getRateLimitKey(username, ip);
-  const record = rateLimitMap.get(key) || { count: 0, firstTime: Date.now() };
-  record.count++;
-
-  if (record.count >= MAX_ATTEMPTS) {
-    record.lockedUntil = Date.now() + LOCK_TIME;
-  }
-
-  rateLimitMap.set(key, record);
-}
-
-function clearRateLimit(username, ip) {
-  rateLimitMap.delete(getRateLimitKey(username, ip));
-}
-
-// 定期清理过期记录
-setInterval(() => {
-  const now = Date.now();
-  for (const [key, record] of rateLimitMap) {
-    if (record.lockedUntil && now > record.lockedUntil + 3600000) {
-      rateLimitMap.delete(key);
-    }
-  }
-}, 3600000);
-
-async function getChildDeptIds(deptId) {
-  if (!deptId) return [];
+async function recordFailedAttempt(username, ip) {
   const db = getDb();
-  const children = await db.prepare('SELECT id FROM departments WHERE parent_id = ?').all(deptId);
-  return children.map(c => c.id);
+  const key = getRateLimitKey(username, ip);
+  const now = Date.now();
+  const record = await db.prepare('SELECT * FROM login_attempts WHERE attempt_key = ?').get(key);
+  const count = (record && now - Number(record.first_time) < 24 * 60 * 60 * 1000) ? Number(record.count) + 1 : 1;
+  const firstTime = record && now - Number(record.first_time) < 24 * 60 * 60 * 1000 ? Number(record.first_time) : now;
+  let lockedUntil = null;
+
+  if (count >= MAX_ATTEMPTS) {
+    lockedUntil = now + LOCK_TIME;
+  }
+
+  await db.prepare(`
+    INSERT INTO login_attempts (attempt_key, count, first_time, locked_until)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT (attempt_key) DO UPDATE SET
+      count = EXCLUDED.count,
+      first_time = EXCLUDED.first_time,
+      locked_until = EXCLUDED.locked_until
+  `).run(key, count, firstTime, lockedUntil);
 }
+
+async function clearRateLimit(username, ip) {
+  const db = getDb();
+  await db.prepare('DELETE FROM login_attempts WHERE attempt_key = ?').run(getRateLimitKey(username, ip));
+}
+
+setInterval(async () => {
+  try {
+    const db = getDb();
+    const now = Date.now();
+    await db.prepare('DELETE FROM login_attempts WHERE first_time < ? OR (locked_until IS NOT NULL AND locked_until < ?)')
+      .run(now - 24 * 60 * 60 * 1000, now - 60 * 60 * 1000);
+  } catch {}
+}, 60 * 60 * 1000);
 
 // ===== 登录 =====
 router.post('/login', async (req, res) => {
@@ -87,7 +87,7 @@ router.post('/login', async (req, res) => {
   const ip = req.ip || req.connection.remoteAddress || 'unknown';
 
   // 检查限流
-  const rateLimitMsg = checkRateLimit(cleanUsername, ip);
+  const rateLimitMsg = await checkRateLimit(cleanUsername, ip);
   if (rateLimitMsg) {
     return res.status(429).json({ error: rateLimitMsg });
   }
@@ -100,25 +100,41 @@ router.post('/login', async (req, res) => {
   `).get(cleanUsername);
 
   if (!user || !bcrypt.compareSync(password, user.password)) {
-    recordFailedAttempt(cleanUsername, ip);
+    await recordFailedAttempt(cleanUsername, ip);
     await logAudit(null, cleanUsername, '登录失败', 'auth', null, `IP: ${ip}`);
     return res.status(401).json({ error: '用户名或密码错误' });
   }
 
-  clearRateLimit(cleanUsername, ip);
+  await clearRateLimit(cleanUsername, ip);
   const childDeptIds = await getChildDeptIds(user.department_id);
   const token = generateToken(user);
+  const csrfToken = crypto.randomBytes(16).toString('hex');
+  const cookieOptions = {
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: req.secure,
+    path: '/',
+    maxAge: 24 * 60 * 60 * 1000
+  };
+  res.cookie('token', token, cookieOptions);
+  res.cookie('csrf', csrfToken, { ...cookieOptions, httpOnly: false });
 
   await logAudit(user.id, user.username, '登录成功', 'auth', null, `IP: ${ip}`);
 
   res.json({
-    token,
+    csrfToken,
     user: {
       id: user.id, username: user.username, name: user.name, role: user.role,
       department_id: user.department_id, dept_name: user.dept_name,
       dept_parent_id: user.dept_parent_id, child_dept_ids: childDeptIds
     }
   });
+});
+
+router.post('/logout', (req, res) => {
+  res.clearCookie('token', { path: '/' });
+  res.clearCookie('csrf', { path: '/' });
+  res.json({ message: '已退出登录' });
 });
 
 router.get('/me', authMiddleware, async (req, res) => {
@@ -187,6 +203,8 @@ router.delete('/users/:id', authMiddleware, requireRole('admin'), async (req, re
   const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(req.params.id);
   if (!user) return res.status(404).json({ error: '用户不存在' });
 
+  // 解除订单创建人引用，避免外键报错
+  await db.prepare('UPDATE orders SET created_by = NULL WHERE created_by = ?').run(req.params.id);
   await db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
   await logAudit(req.user.id, req.user.name, '删除用户', 'user', parseInt(req.params.id), `用户名: ${user.username}`);
   res.json({ message: '用户已删除' });

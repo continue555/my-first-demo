@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const { getDb } = require('../database');
+const { parseCookies } = require('../lib/cookies');
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) { console.error('[FATAL] JWT_SECRET 未设置，请在 .env 中配置'); process.exit(1); }
@@ -14,24 +15,36 @@ function generateToken(user) {
 
 function authMiddleware(req, res, next) {
   const authHeader = req.headers.authorization;
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+  const cookieToken = parseCookies(req.headers.cookie).token;
+  let token = null;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+  } else if (!authHeader) {
+    token = cookieToken;
+  } else {
     return res.status(401).json({ error: '未登录或登录已过期' });
   }
-  const token = authHeader.split(' ')[1];
+  if (!token) return res.status(401).json({ error: '未登录或登录已过期' });
+  let decoded;
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = decoded;
-    try {
-      const db = getDb();
-      if (!db) { next(); return; }
-      db.prepare("SELECT id FROM users WHERE id = ?").get(decoded.id).then(function(user) {
-        if (!user) return res.status(401).json({ error: "账号已被删除，请重新登录" });
-        next();
-      }).catch(function() { next(); });
-    } catch(e) { next(); }
+    decoded = jwt.verify(token, JWT_SECRET);
   } catch (err) {
     return res.status(401).json({ error: '登录已过期，请重新登录' });
   }
+
+  const db = getDb();
+  if (!db) return res.status(500).json({ error: '服务器数据库未就绪' });
+
+  db.prepare('SELECT id, username, name, role, department_id FROM users WHERE id = ?').get(decoded.id)
+    .then(user => {
+      if (!user) return res.status(401).json({ error: "账号已被删除，请重新登录" });
+      req.user = { ...decoded, ...user };
+      next();
+    })
+    .catch(err => {
+      console.error('[Auth] 用户校验失败:', err.message);
+      return res.status(500).json({ error: '服务器内部错误' });
+    });
 }
 
 function requireRole(...roles) {
@@ -50,10 +63,17 @@ async function getDepartmentTreeIds(departmentId) {
   return ids;
 }
 
+async function getChildDeptIds(departmentId) {
+  if (!departmentId) return [];
+  const db = getDb();
+  const children = await db.prepare('SELECT id FROM departments WHERE parent_id = ?').all(departmentId);
+  return children.map(c => c.id);
+}
+
 async function departmentFilter(req, res, next) {
   if (req.user.role === 'admin' || req.user.role === 'management') return next();
   req.userDeptIds = await getDepartmentTreeIds(req.user.department_id);
   next();
 }
 
-module.exports = { JWT_SECRET, generateToken, authMiddleware, requireRole, departmentFilter, getDepartmentTreeIds };
+module.exports = { JWT_SECRET, generateToken, authMiddleware, requireRole, departmentFilter, getDepartmentTreeIds, getChildDeptIds };

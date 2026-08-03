@@ -4,11 +4,86 @@ const fs = require('fs');
 const ExcelJS = require('exceljs');
 const { getDb } = require('../database');
 const { authMiddleware, requireRole } = require('../middleware/auth');
+const { createDownloadTicket } = require('../lib/download-ticket');
+const STATUS_LABELS = require('../shared/status-labels.json');
+const { getOverdueInfo } = require('../lib/overdue');
 
 const router = express.Router();
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
+const EXPORT_JOB_DIR = path.join(__dirname, '..', 'uploads', 'export-jobs');
+if (!fs.existsSync(EXPORT_JOB_DIR)) fs.mkdirSync(EXPORT_JOB_DIR, { recursive: true });
 const IMG_MAX_W = 150;
 const IMG_MAX_H = 100;
+const exportJobs = new Map();
+let exportJobSeq = 1;
+const JOBS_FILE = path.join(EXPORT_JOB_DIR, 'jobs.json');
+
+function saveExportJobs() {
+  fs.writeFileSync(JOBS_FILE, JSON.stringify([...exportJobs.values()], null, 2));
+}
+
+async function processExportJob(job) {
+  const db = getDb();
+  const { status, ids } = job.payload || {};
+  let orders;
+  if (Array.isArray(ids) && ids.length > 0) {
+    const placeholders = ids.map(() => '?').join(',');
+    orders = await db.prepare(`
+      SELECT o.*, u.name as creator_name FROM orders o
+      LEFT JOIN users u ON o.created_by = u.id WHERE o.id IN (${placeholders}) ORDER BY o.created_at DESC
+    `).all(...ids);
+  } else {
+    let where = '';
+    const params = [];
+    if (status) { where = 'WHERE o.status = ?'; params.push(status); }
+    orders = await db.prepare(`
+      SELECT o.*, u.name as creator_name FROM orders o
+      LEFT JOIN users u ON o.created_by = u.id ${where} ORDER BY o.created_at DESC
+    `).all(...params);
+  }
+
+  try {
+    const wb = await buildOrdersWorkbook(orders, '订单数据', job.downloadBase, job.userId);
+    const buf = await wb.xlsx.writeBuffer();
+    const filename = `export_${job.id}.xlsx`;
+    fs.writeFileSync(path.join(EXPORT_JOB_DIR, filename), buf);
+    job.status = 'done';
+    job.filename = filename;
+    job.error = null;
+  } catch (e) {
+    job.status = 'error';
+    job.error = e.message;
+  }
+  saveExportJobs();
+}
+
+function loadExportJobs() {
+  if (!fs.existsSync(JOBS_FILE)) return;
+  try {
+    const jobs = JSON.parse(fs.readFileSync(JOBS_FILE, 'utf8'));
+    const maxId = jobs.reduce((max, job) => Math.max(max, Number(job.id) || 0), 0);
+    if (maxId > 0) exportJobSeq = maxId + 1;
+    for (const job of jobs) {
+      exportJobs.set(job.id, job);
+      if (job.status === 'pending') setImmediate(() => processExportJob(job));
+    }
+  } catch (e) {
+    console.error('[Export] 恢复导出任务失败:', e.message);
+  }
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, job] of exportJobs) {
+    if (now - job.createdAt > 60 * 60 * 1000) {
+      if (job.filename) {
+        try { fs.unlinkSync(path.join(EXPORT_JOB_DIR, job.filename)); } catch {}
+      }
+      exportJobs.delete(id);
+    }
+  }
+  saveExportJobs();
+}, 60 * 60 * 1000);
 
 // === 辅助函数 ===
 
@@ -36,22 +111,18 @@ function overdueStyle(color) {
 }
 
 function getStatusText(status) {
-  const m = { pending: '未开始', in_progress: '进行中', completed: '已完成', delayed: '已延期', cancelled: '已取消' };
-  return m[status] || status;
+  return STATUS_LABELS[status] || status;
 }
 
 function getOverdueColor(stage) {
-  const now = new Date(); now.setHours(0, 0, 0, 0);
-  const planned = stage.planned_end_date;
-  const actual = stage.actual_end_date;
-  const status = stage.status;
-  const plannedDate = planned ? new Date(planned) : null;
-  const actualDate = actual ? new Date(actual) : null;
-  if (plannedDate) plannedDate.setHours(0, 0, 0, 0);
-  if (actualDate) actualDate.setHours(0, 0, 0, 0);
-  if (status === 'completed' && actualDate && plannedDate && actualDate > plannedDate) return { bg: 'f3f4f6', fg: '374151' };
-  if (status === 'completed' && actualDate && plannedDate && actualDate <= plannedDate) return { bg: 'd1fae5', fg: '059669' };
-  if ((status === 'in_progress' || status === 'delayed') && plannedDate && plannedDate < now) return { bg: 'fee2e2', fg: 'dc2626' };
+  const info = getOverdueInfo(stage);
+  if (!info) return null;
+  if (info.cssClass === 'overdue-red') {
+    if (stage.status === 'completed') return { bg: 'f3f4f6', fg: '374151' };
+    if (stage.status === 'in_progress' || stage.status === 'delayed') return { bg: 'fee2e2', fg: 'dc2626' };
+    return null;
+  }
+  if (info.cssClass === 'overdue-green') return { bg: 'd1fae5', fg: '059669' };
   return null;
 }
 
@@ -63,16 +134,10 @@ function getStatusLabel(color) {
 }
 
 function getOrderOverdueColor(order) {
-  const now = new Date(); now.setHours(0, 0, 0, 0);
-  const planned = order.planned_delivery_date;
-  const actual = order.actual_delivery_date;
-  const status = order.status;
-  const plannedDate = planned ? new Date(planned) : null;
-  const actualDate = actual ? new Date(actual) : null;
-  if (plannedDate) plannedDate.setHours(0, 0, 0, 0);
-  if (actualDate) actualDate.setHours(0, 0, 0, 0);
-  if (status !== 'completed' && status !== 'cancelled' && plannedDate && plannedDate < now) return { bg: 'fee2e2', fg: 'dc2626' };
-  if (status === 'completed' && actualDate && plannedDate && actualDate <= plannedDate) return { bg: 'd1fae5', fg: '059669' };
+  const info = getOverdueInfo(order);
+  if (!info) return null;
+  if (info.cssClass === 'overdue-red') return { bg: 'fee2e2', fg: 'dc2626' };
+  if (info.cssClass === 'overdue-green') return { bg: 'd1fae5', fg: '059669' };
   return null;
 }
 
@@ -129,7 +194,7 @@ function calcImageSize(origW, origH) {
 
 // 写入附件行（含图片嵌入）
 // 返回: 用于后续行高设置的图片信息数组 [{row, height}]
-function writeFileRows(ws, rowIdx, files, exportToken, workbook) {
+function writeFileRows(ws, rowIdx, files, downloadBase, userId, workbook) {
   const imgRowHeights = [];
   if (files.length === 0) return { rowIdx, imgRowHeights };
 
@@ -179,7 +244,7 @@ function writeFileRows(ws, rowIdx, files, exportToken, workbook) {
     }
 
     // 下载链接
-    const dl = 'http://42.194.139.7/api/files/' + f.id + '/download?token=' + exportToken;
+    const dl = downloadBase + '/api/files/' + f.id + '/download?ticket=' + createDownloadTicket(f.id, userId);
     row.getCell(7).value = { text: '下载', hyperlink: dl };
     row.getCell(7).font = { underline: true, color: { argb: 'FF2563eb' } };
     row.getCell(7).alignment = { horizontal: 'left' };
@@ -198,11 +263,113 @@ function applyCellStyle(cell, color) {
   cell.alignment = { horizontal: 'left' };
 }
 
+async function buildOrdersWorkbook(orders, sheetName, downloadBase, userId) {
+  const db = getDb();
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet(sheetName);
+
+  let rowIdx = 1;
+  const headers = ['订单编号', '客户名称', '项目名称', '产品型号', '数量', '合同金额', '计划交货日期', '实际交货日期', '订单状态', '创建人', '创建时间'];
+  const stageHeaders = ['阶段名称', '状态', '开始时间', '计划完成时间', '实际完成时间', '是否如期完成', '操作人'];
+
+  const hdrRow = ws.getRow(rowIdx);
+  headers.forEach((h, i) => {
+    const cell = hdrRow.getCell(i + 1);
+    cell.value = h;
+    Object.assign(cell, headerStyle('4ade80', '065f46'));
+  });
+  stageHeaders.forEach((h, i) => {
+    const cell = hdrRow.getCell(headers.length + 1 + i);
+    cell.value = h;
+    Object.assign(cell, headerStyle('fbbf24', '92400e'));
+  });
+  rowIdx++;
+
+  const orderIds = orders.map(o => o.id);
+  const filesMap = new Map();
+  const stagesMap = new Map();
+  if (orderIds.length > 0) {
+    const placeholders = orderIds.map(() => '?').join(',');
+    const fileRows = await db.prepare(`
+      SELECT f.*, u.name as uploader_name FROM order_files f
+      LEFT JOIN users u ON f.uploaded_by = u.id
+      WHERE f.order_id IN (${placeholders}) ORDER BY f.created_at DESC
+    `).all(...orderIds);
+    for (const file of fileRows) {
+      if (!filesMap.has(file.order_id)) filesMap.set(file.order_id, []);
+      filesMap.get(file.order_id).push(file);
+    }
+    const stageRows = await db.prepare(`
+      SELECT * FROM process_stages WHERE order_id IN (${placeholders}) ORDER BY stage_order
+    `).all(...orderIds);
+    for (const stage of stageRows) {
+      if (!stagesMap.has(stage.order_id)) stagesMap.set(stage.order_id, []);
+      stagesMap.get(stage.order_id).push(stage);
+    }
+  }
+
+  for (const order of orders) {
+    const files = filesMap.get(order.id) || [];
+    const row = ws.getRow(rowIdx);
+    row.getCell(1).value = order.order_no;
+    row.getCell(2).value = order.customer_name;
+    row.getCell(3).value = order.project_name;
+    row.getCell(4).value = order.product_model || '';
+    row.getCell(5).value = order.quantity;
+    row.getCell(6).value = order.contract_amount || '';
+    row.getCell(7).value = order.planned_delivery_date || '';
+    row.getCell(8).value = order.actual_delivery_date || '';
+    row.getCell(9).value = getStatusText(order.status);
+    row.getCell(10).value = order.creator_name || '';
+    row.getCell(11).value = order.created_at;
+    for (let i = 1; i <= headers.length; i++) row.getCell(i).alignment = { horizontal: 'left' };
+    if (files.length > 0) row.getCell(headers.length + 8).value = '附件: ' + files.length + ' 个';
+
+    const orderColor = getOrderOverdueColor(order);
+    if (orderColor) for (let i = 1; i <= headers.length; i++) applyCellStyle(row.getCell(i), orderColor);
+    rowIdx++;
+
+    const stages = stagesMap.get(order.id) || [];
+    for (const s of stages) {
+      const color = getOverdueColor(s);
+      const base = headers.length + 1;
+      const sRow = ws.getRow(rowIdx);
+      sRow.getCell(base).value = s.stage_name;
+      sRow.getCell(base + 1).value = getStatusText(s.status);
+      sRow.getCell(base + 2).value = s.start_date || '';
+      sRow.getCell(base + 3).value = s.planned_end_date || '';
+      sRow.getCell(base + 4).value = s.actual_end_date || '';
+      sRow.getCell(base + 5).value = getStatusLabel(color);
+      sRow.getCell(base + 6).value = s.operator_name || '';
+      for (let i = 0; i < 7; i++) {
+        sRow.getCell(base + i).alignment = { horizontal: 'left' };
+        if (color) applyCellStyle(sRow.getCell(base + i), color);
+      }
+      rowIdx++;
+    }
+
+    if (files.length > 0) {
+      const result = writeFileRows(ws, rowIdx, files, downloadBase, userId, wb);
+      rowIdx = result.rowIdx;
+      result.imgRowHeights.forEach(h => { ws.getRow(h.row).height = h.height; });
+      rowIdx++;
+    }
+  }
+
+  for (let i = 1; i <= headers.length + 7; i++) ws.getColumn(i).width = 15;
+  ws.getColumn(6).width = 22;
+  return wb;
+}
+
 // === 批量导出（全部/按状态） ===
 router.get('/orders', authMiddleware, requireRole('admin', 'management'), async (req, res) => {
-  const exportToken = (req.headers.authorization || '').replace('Bearer ', '');
+  const downloadBase = req.protocol + '://' + req.get('host');
   const db = getDb();
   const { status } = req.query;
+  const validStatuses = ['pending', 'in_progress', 'completed', 'delayed'];
+  if (status && !validStatuses.includes(status)) {
+    return res.status(400).json({ error: '不支持的订单状态' });
+  }
   let where = '';
   const params = [];
   if (status) { where = 'WHERE o.status = ?'; params.push(status); }
@@ -253,7 +420,7 @@ router.get('/orders', authMiddleware, requireRole('admin', 'management'), async 
     if (orderColor) for (let i = 1; i <= headers.length; i++) applyCellStyle(row.getCell(i), orderColor);
     rowIdx++;
 
-    const stages = await await db.prepare('SELECT * FROM process_stages WHERE order_id = ? ORDER BY stage_order').all(order.id);
+    const stages = await db.prepare('SELECT * FROM process_stages WHERE order_id = ? ORDER BY stage_order').all(order.id);
     for (const s of stages) {
       const color = getOverdueColor(s);
       const base = headers.length + 1;
@@ -273,7 +440,7 @@ router.get('/orders', authMiddleware, requireRole('admin', 'management'), async 
     }
 
     if (files.length > 0) {
-      const result = writeFileRows(ws, rowIdx, files, exportToken, wb);
+      const result = writeFileRows(ws, rowIdx, files, downloadBase, req.user.id, wb);
       rowIdx = result.rowIdx;
       result.imgRowHeights.forEach(h => { ws.getRow(h.row).height = h.height; });
       rowIdx++;
@@ -291,7 +458,7 @@ router.get('/orders', authMiddleware, requireRole('admin', 'management'), async 
 
 // === 批量导出（按ID选择） ===
 router.get('/orders/batch', authMiddleware, requireRole('admin', 'management'), async (req, res) => {
-  const exportToken = (req.headers.authorization || '').replace('Bearer ', '');
+  const downloadBase = req.protocol + '://' + req.get('host');
   const db = getDb();
   const ids = [].concat(req.query.ids || []).map(Number).filter(Boolean);
   if (ids.length === 0) return res.status(400).json({ error: '请选择要导出的订单' });
@@ -343,7 +510,7 @@ router.get('/orders/batch', authMiddleware, requireRole('admin', 'management'), 
     if (orderColor) for (let i = 1; i <= headers.length; i++) applyCellStyle(row.getCell(i), orderColor);
     rowIdx++;
 
-    const stages = await await db.prepare('SELECT * FROM process_stages WHERE order_id = ? ORDER BY stage_order').all(order.id);
+    const stages = await db.prepare('SELECT * FROM process_stages WHERE order_id = ? ORDER BY stage_order').all(order.id);
     for (const s of stages) {
       const color = getOverdueColor(s);
       const base = headers.length + 1;
@@ -363,7 +530,7 @@ router.get('/orders/batch', authMiddleware, requireRole('admin', 'management'), 
     }
 
     if (files.length > 0) {
-      const result = writeFileRows(ws, rowIdx, files, exportToken, wb);
+      const result = writeFileRows(ws, rowIdx, files, downloadBase, req.user.id, wb);
       rowIdx = result.rowIdx;
       result.imgRowHeights.forEach(h => { ws.getRow(h.row).height = h.height; });
       rowIdx++;
@@ -379,9 +546,52 @@ router.get('/orders/batch', authMiddleware, requireRole('admin', 'management'), 
   res.send(buf);
 });
 
+router.post('/jobs', authMiddleware, requireRole('admin', 'management'), async (req, res) => {
+  const db = getDb();
+  const downloadBase = req.protocol + '://' + req.get('host');
+  const { status, ids } = req.body || {};
+  const validStatuses = ['pending', 'in_progress', 'completed', 'delayed'];
+  if (status && !validStatuses.includes(status)) {
+    return res.status(400).json({ error: '不支持的订单状态' });
+  }
+
+  const jobId = String(exportJobSeq++);
+  const job = {
+    id: jobId,
+    status: 'pending',
+    error: null,
+    filename: null,
+    createdAt: Date.now(),
+    userId: req.user.id,
+    downloadBase,
+    payload: { status: status || null, ids: Array.isArray(ids) ? ids : null }
+  };
+  exportJobs.set(jobId, job);
+  saveExportJobs();
+  setImmediate(() => processExportJob(job));
+
+  res.status(202).json({ jobId });
+});
+
+router.get('/jobs/:id', authMiddleware, requireRole('admin', 'management'), async (req, res) => {
+  const job = exportJobs.get(req.params.id);
+  if (!job) return res.status(404).json({ error: '导出任务不存在' });
+  res.json({
+    status: job.status,
+    error: job.error || null,
+    downloadUrl: job.status === 'done' ? `/api/export/jobs/${job.id}/download` : null
+  });
+});
+
+router.get('/jobs/:id/download', authMiddleware, requireRole('admin', 'management'), async (req, res) => {
+  const job = exportJobs.get(req.params.id);
+  if (!job || job.status !== 'done' || !job.filename) return res.status(404).json({ error: '导出文件不存在' });
+  res.download(path.join(EXPORT_JOB_DIR, job.filename));
+});
+
 // === 单个订单导出 ===
 router.get('/order/:id', authMiddleware, requireRole('admin', 'management'), async (req, res) => {
-  const exportToken = (req.headers.authorization || '').replace('Bearer ', '');
+  const downloadBase = req.protocol + '://' + req.get('host');
   const db = getDb();
   const order = await db.prepare(`
     SELECT o.*, u.name as creator_name FROM orders o
@@ -389,7 +599,7 @@ router.get('/order/:id', authMiddleware, requireRole('admin', 'management'), asy
   `).get(req.params.id);
   if (!order) return res.status(404).json({ error: '订单不存在' });
 
-  const stages = await await db.prepare('SELECT * FROM process_stages WHERE order_id = ? ORDER BY stage_order').all(order.id);
+  const stages = await db.prepare('SELECT * FROM process_stages WHERE order_id = ? ORDER BY stage_order').all(order.id);
   const files = await getFilesInfo(order.id);
 
   const wb = new ExcelJS.Workbook();
@@ -494,7 +704,7 @@ router.get('/order/:id', authMiddleware, requireRole('admin', 'management'), asy
         }
       }
 
-      const dl = 'http://42.194.139.7/api/files/' + f.id + '/download?token=' + exportToken;
+      const dl = downloadBase + '/api/files/' + f.id + '/download?ticket=' + createDownloadTicket(f.id, req.user.id);
       row.getCell(7).value = { text: '下载', hyperlink: dl };
       row.getCell(7).font = { underline: true, color: { argb: 'FF2563eb' } };
       row.getCell(7).alignment = { horizontal: 'left' };
@@ -510,4 +720,4 @@ router.get('/order/:id', authMiddleware, requireRole('admin', 'management'), asy
   res.send(buf);
 });
 
-module.exports = router;
+module.exports = { router, loadExportJobs };

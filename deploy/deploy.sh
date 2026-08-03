@@ -16,6 +16,10 @@ mkdir -p $APP_DIR/backups
 
 # 2. 复制文件（假设代码已在当前目录）
 echo "[2/6] 复制项目文件..."
+# 先清理旧静态资源，避免旧 hash 文件堆积；.env、uploads、logs、backups 都不受影响
+if [ -d ./public/assets ]; then
+  rm -rf $APP_DIR/public/assets
+fi
 cp -r ./* $APP_DIR/ 2>/dev/null || true
 cd $APP_DIR
 

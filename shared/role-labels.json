@@ -1,0 +1,9 @@
+{
+  "admin": "管理员",
+  "management": "总经理",
+  "sales": "销售",
+  "production": "生产",
+  "finance": "财务",
+  "mold": "模具管理",
+  "material_follow": "物料跟进"
+}

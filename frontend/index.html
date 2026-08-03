@@ -4,6 +4,20 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>吹瓶机机械制造管理系统</title>
+    <script>
+      (function () {
+        var reloadKey = '__codex_chunk_reload__';
+        function reloadOnce() {
+          if (sessionStorage.getItem(reloadKey)) return;
+          sessionStorage.setItem(reloadKey, '1');
+          window.location.reload();
+        }
+        window.addEventListener('error', function (event) {
+          if (event.target && event.target.tagName === 'SCRIPT' && event.target.src) reloadOnce();
+        }, true);
+        window.addEventListener('vite:preloadError', reloadOnce);
+      })();
+    </script>
   </head>
   <body>
     <div id="app"></div>

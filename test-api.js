@@ -1,7 +1,9 @@
 ﻿const http = require("http");
 
+const STAGE_DEFINITIONS = require("./shared/stage-defs.json");
+const ExcelJS = require("exceljs");
 const BASE = "http://localhost:3000";
-let passed = 0, failed = 0, token = "";
+let passed = 0, failed = 0, token = "", createdOrderId = null, roleOrderId = null, testFileId = null;
 
 function req(method, path, body) {
   return new Promise((resolve, reject) => {
@@ -34,36 +36,297 @@ async function test(name, fn) {
   } catch (e) { failed++; console.log("  [FAIL] " + name + ": " + e.message); }
 }
 
+async function rawFetch(method, path, body) {
+  const headers = { Authorization: "Bearer " + token };
+  if (body) headers["Content-Type"] = "application/json";
+  const res = await fetch(BASE + path, {
+    method,
+    headers,
+    body: body ? JSON.stringify(body) : undefined
+  });
+  const buffer = Buffer.from(await res.arrayBuffer());
+  return { status: res.status, buffer, headers: res.headers };
+}
+
+async function uploadFile(orderId, filename) {
+  const form = new FormData();
+  form.append("file", new Blob(["hello"], { type: "text/plain" }), filename);
+  const res = await fetch(BASE + `/api/orders/${orderId}/files`, {
+    method: "POST",
+    headers: { Authorization: "Bearer " + token },
+    body: form
+  });
+  return { status: res.status, body: await res.json() };
+}
+
+async function loginUser(username, password) {
+  const res = await fetch(BASE + '/api/auth/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ username, password })
+  });
+  const body = await res.json();
+  const setCookies = typeof res.headers.getSetCookie === 'function'
+    ? res.headers.getSetCookie()
+    : [res.headers.get('set-cookie') || ''];
+  for (const cookie of setCookies) {
+    const match = cookie.match(/token=([^;]+)/);
+    if (match) {
+      token = decodeURIComponent(match[1]);
+      break;
+    }
+  }
+  return { status: res.status, body };
+}
+
 async function main() {
   console.log("=== 吹瓶机管理系统 - API 测试 ===\n");
 
   await test("Health check", async () => { const r = await req("GET", "/api/health"); return r.body.status === "ok" ? r.body : { error: "not ok" }; });
+  await test("Missing asset returns 404", async () => { const r = await req("GET", "/assets/__missing__.js"); return r.status === 404 ? {} : { error: "expected 404, got " + r.status }; });
+  await test("Stale asset alias serves JS", async () => { const r = await req("GET", "/assets/index-CI0-ZRJE.js"); return r.status === 200 && typeof r.body === "string" && r.body.includes("import") ? {} : { error: "stale alias failed" }; });
+  await test("Unknown old asset alias serves JS", async () => { const r = await req("GET", "/assets/OrderDetail-UNKNOWN.js"); return r.status === 200 && typeof r.body === "string" && r.body.includes("export") ? {} : { error: "dynamic alias failed" }; });
+  await test("Unknown old index alias serves entry", async () => { const r = await req("GET", "/assets/index-OLDHASH.js"); return r.status === 200 && typeof r.body === "string" && r.body.includes("mount") ? {} : { error: "index alias failed" }; });
   if (failed > 0) { console.log("\n服务器未启动，测试终止"); process.exit(1); }
 
-  const login = await req("POST", "/api/auth/login", { username: "admin", password: "123456" });
-  token = login.body.token;
+  const login = await loginUser("admin", "123456");
   await test("Login", async () => login.body.user ? {} : { error: "login failed" });
+  await test("Login response hides token", async () => { const r = await loginUser("admin", "123456"); return !("token" in r.body) ? {} : { error: "token still returned" }; });
   if (!token) { console.log("\n登录失败，测试终止"); process.exit(1); }
 
   await test("Stats", async () => { const r = await req("GET", "/api/orders/stats"); return r.body.stats ? {} : { error: "no stats" }; });
+  await test("Stats has overdue and no cancelled", async () => { const r = await req("GET", "/api/orders/stats"); return !("cancelled" in r.body.stats) && typeof r.body.stats.overdue === "number" ? {} : { error: "stats mismatch" }; });
   await test("Orders list", async () => { const r = await req("GET", "/api/orders?limit=3"); return r.body.orders ? {} : { error: "no orders" }; });
-  await test("Create order", async () => { const r = await req("POST", "/api/orders", { customer_name: "Test", project_name: "Test" }); return r.body.orderId ? {} : { error: "create failed" }; });
-  await test("Order detail (18 stages)", async () => { const r = await req("GET", "/api/orders/2"); return r.body.stages && r.body.stages.length === 18 ? {} : { error: "expected 10+ stages" }; });
-  await test("Stage start", async () => { const r = await req("PUT", "/api/orders/2/stages/manufacturing_approval", { status: "in_progress" }); return r.body.message ? {} : { error: "start failed" }; });
-  await test("Stage complete", async () => { const r = await req("PUT", "/api/orders/2/stages/manufacturing_approval", { status: "completed" }); return r.body.message ? {} : { error: "complete failed" }; });
+  const customNo = "TEST-" + Date.now();
+  async function runStage(orderId, key) {
+    const timeRes = await req("PUT", `/api/orders/${orderId}/stages/${key}/time`, { start_date: "2026-08-01T09:00", planned_end_date: "2026-08-02T09:00" });
+    if (timeRes.status !== 200) throw new Error(`time ${key}: ${JSON.stringify(timeRes.body)}`);
+    const startRes = await req("PUT", `/api/orders/${orderId}/stages/${key}`, { status: "in_progress" });
+    if (startRes.status !== 200) throw new Error(`start ${key}: ${JSON.stringify(startRes.body)}`);
+    const doneRes = await req("PUT", `/api/orders/${orderId}/stages/${key}`, { status: "completed" });
+    if (doneRes.status !== 200) throw new Error(`done ${key}: ${JSON.stringify(doneRes.body)}`);
+  }
+
+  async function runStageAs(orderId, key, username) {
+    const timeRes = await req("PUT", `/api/orders/${orderId}/stages/${key}/time`, { start_date: "2026-08-01T09:00", planned_end_date: "2026-08-02T09:00" });
+    if (timeRes.status !== 200) throw new Error(`time ${key}: ${JSON.stringify(timeRes.body)}`);
+    const oldToken = token;
+    const login = await loginUser(username, "123456");
+    if (!login.body.user || login.body.user.username !== username) {
+      token = oldToken;
+      throw new Error(`login failed as ${username}: ${JSON.stringify(login.body)}`);
+    }
+    const startRes = await req("PUT", `/api/orders/${orderId}/stages/${key}`, { status: "in_progress" });
+    if (startRes.status !== 200) {
+      token = oldToken;
+      throw new Error(`start ${key} as ${username}: ${JSON.stringify(startRes.body)}`);
+    }
+    const doneRes = await req("PUT", `/api/orders/${orderId}/stages/${key}`, { status: "completed" });
+    token = oldToken;
+    if (doneRes.status !== 200) throw new Error(`done ${key} as ${username}: ${JSON.stringify(doneRes.body)}`);
+  }
+
+  await test("Create order with custom number", async () => {
+    const r = await req("POST", "/api/orders", { order_no: customNo, customer_name: "Test", project_name: "Test", planned_delivery_date: "2026-08-10" });
+    if (r.body.orderId) createdOrderId = r.body.orderId;
+    return r.body.orderNo === customNo ? {} : { error: "create or custom number failed" };
+  });
+  await test("Duplicate order number rejected", async () => {
+    const r = await req("POST", "/api/orders", { order_no: customNo, customer_name: "X", project_name: "Y", planned_delivery_date: "2026-08-10" });
+    return r.status === 400 ? {} : { error: "expected 400, got " + r.status };
+  });
+  await test("Planned delivery date required", async () => { const r = await req("POST", "/api/orders", { customer_name: "Test", project_name: "Test" }); return r.status === 400 ? {} : { error: "expected 400, got " + r.status }; });
+  await test("Invalid quantity rejected", async () => { const r = await req("POST", "/api/orders", { customer_name: "Test", project_name: "Test", quantity: -1, planned_delivery_date: "2026-08-10" }); return r.status === 400 ? {} : { error: "expected 400, got " + r.status }; });
+  await test("Stage start without time rejected", async () => { const r = await req("PUT", `/api/orders/${createdOrderId}/stages/contract_sign`, { status: "in_progress" }); return r.status === 400 ? {} : { error: "expected 400, got " + r.status }; });
+  await test("Order detail (22 stages)", async () => { const r = await req("GET", `/api/orders/${createdOrderId}`); return r.body.stages && r.body.stages.length === 22 ? {} : { error: "expected 22 stages" }; });
+  await test("Stage start", async () => { await req("PUT", `/api/orders/${createdOrderId}/stages/contract_sign/time`, { start_date: "2026-08-01T09:00", planned_end_date: "2026-08-02T09:00" }); const r = await req("PUT", `/api/orders/${createdOrderId}/stages/contract_sign`, { status: "in_progress" }); return r.body.message ? {} : { error: "start failed" }; });
+  await test("Stage complete", async () => { const r = await req("PUT", `/api/orders/${createdOrderId}/stages/contract_sign`, { status: "completed" }); return r.body.message ? {} : { error: "complete failed" }; });
+  await test("Full flow all 22 stages", async () => {
+    const detail = await req("GET", `/api/orders/${createdOrderId}`);
+    const statusMap = {};
+    for (const s of detail.body.stages || []) statusMap[s.stage_key] = s.status;
+    try {
+      for (const stage of STAGE_DEFINITIONS) {
+        if (statusMap[stage.key] === "completed") continue;
+        await runStage(createdOrderId, stage.key);
+      }
+      return {};
+    } catch (e) {
+      return { error: e.message };
+    }
+  });
+  await test("Role-driven full flow", async () => {
+    const created = await req("POST", "/api/orders", { customer_name: "RoleTest", project_name: "RoleTest", planned_delivery_date: "2026-08-10" });
+    if (!created.body.orderId) return { error: "role order create failed" };
+    const orderId = created.body.orderId;
+    roleOrderId = orderId;
+    const roleMap = {
+      contract_sign: "xiaoshou1",
+      deposit_confirm: "caiwu1",
+      manufacturing_approval: "shenpi1",
+      gm_sign: "zongjingli",
+      production_order: "xiaoshou1",
+      technical_design: "jishu1",
+      purchase_plan: "caigou1",
+      purchase_frame: "caigou1",
+      purchase_mold_frame: "caigou1",
+      purchase_electrical: "caigou1",
+      purchase_cover: "caigou1",
+      mold_design_purchase: "mujv1",
+      frame_follow_up: "wuliao1",
+      mold_frame_follow_up: "wuliao1",
+      electrical_follow_up: "wuliao1",
+      cover_follow_up: "wuliao1",
+      mold_design_follow_up: "wuliao1",
+      material_in: "cangku1",
+      warehouse_prepare: "cangku1",
+      assembly: "zhuangpei1",
+      debug: "tiaoshi1",
+      shipping: "fahuo1"
+    };
+    try {
+      for (const stage of STAGE_DEFINITIONS) {
+        const username = roleMap[stage.key];
+        if (username) await runStageAs(orderId, stage.key, username);
+        else await runStage(orderId, stage.key);
+      }
+      return {};
+    } catch (e) {
+      return { error: e.message };
+    }
+  });
+  await test("Attachment upload and preview", async () => {
+    const filename = "\u6d4b\u8bd5\u9644\u4ef6.txt";
+    const up = await uploadFile(createdOrderId, filename);
+    if (up.status !== 201 || up.body.filename !== filename) return { error: "upload failed" };
+    const files = await req("GET", `/api/orders/${createdOrderId}/files`);
+    const file = (files.body.files || []).find(f => f.original_name === filename);
+    if (!file) return { error: "file not found" };
+    testFileId = file.id;
+    const ticket = await req("GET", `/api/files/${file.id}/ticket`);
+    if (ticket.status !== 200 || !ticket.body.url) return { error: "ticket failed" };
+    const preview = await rawFetch("GET", ticket.body.url);
+    if (preview.status !== 200) return { error: "preview failed" };
+    return {};
+  });
+  await test("Non-admin can see attachment", async () => {
+    if (!testFileId) return { error: "no test file" };
+    const oldToken = token;
+    const jishu = await loginUser("jishu1", "123456");
+    const files = await req("GET", `/api/orders/${createdOrderId}/files`);
+    token = oldToken;
+    const visible = (files.body.files || []).some(f => f.id === testFileId);
+    return visible ? {} : { error: "attachment should be visible" };
+  });
+  await test("Non-admin can preview attachment", async () => {
+    if (!testFileId) return { error: "no test file" };
+    const oldToken = token;
+    const jishu = await loginUser("jishu1", "123456");
+    const ticket = await req("GET", `/api/files/${testFileId}/ticket`);
+    const preview = ticket.body.url ? await rawFetch("GET", ticket.body.url) : null;
+    token = oldToken;
+    if (!preview || preview.status !== 200) return { error: "non-admin preview failed" };
+    return {};
+  });
+  await test("Non-sales cannot upload attachment", async () => {
+    const oldToken = token;
+    const jishu = await loginUser("jishu1", "123456");
+    const up = await uploadFile(createdOrderId, "no-upload.txt");
+    token = oldToken;
+    return up.status === 403 ? {} : { error: "expected 403, got " + up.status };
+  });
+  await test("Non-admin cannot delete attachment", async () => {
+    if (!testFileId) return { error: "no test file" };
+    const oldToken = token;
+    const jishu = await loginUser("jishu1", "123456");
+    const del = await req("DELETE", `/api/files/${testFileId}`);
+    token = oldToken;
+    return del.status === 403 ? {} : { error: "expected 403, got " + del.status };
+  });
+  await test("Admin can delete attachment", async () => {
+    if (!testFileId) return { error: "no test file" };
+    const del = await req("DELETE", `/api/files/${testFileId}`);
+    testFileId = null;
+    return del.status === 200 ? {} : { error: "delete failed" };
+  });
   await test("Notifications", async () => { const r = await req("GET", "/api/notifications"); return r.body.notifications ? {} : { error: "no notifs" }; });
-  await test("Export single order", async () => { const r = await req("GET", "/api/export/order/2"); return r.status === 200 ? {} : { error: "export failed" }; });
+  await test("Notification read isolation", async () => {
+    const list = await req("GET", "/api/notifications?limit=200");
+    const target = (list.body.notifications || []).find(n => n.recipient_dept_id === 4 && (n.order_id === createdOrderId || n.order_id === roleOrderId));
+    if (!target) return { error: "no dept 4 notification" };
+    const mark = await req("PUT", `/api/notifications/${target.id}/read`);
+    if (mark.status !== 200) return { error: "mark failed" };
+    const oldToken = token;
+    const jishu = await loginUser("jishu1", "123456");
+    const jishuList = await req("GET", "/api/notifications?limit=200");
+    const jishuTarget = (jishuList.body.notifications || []).find(n => n.id === target.id);
+    token = oldToken;
+    if (!jishuTarget || jishuTarget.is_read !== 0) return { error: "read not isolated" };
+    return {};
+  });
+  await test("Preview ticket endpoint", async () => { const r = await req("GET", "/api/files/999999/ticket"); return r.status === 404 ? {} : { error: "expected 404, got " + r.status }; });
+  await test("Export contains order and stages", async () => {
+    const res = await rawFetch("GET", `/api/export/order/${createdOrderId}`);
+    if (res.status !== 200) return { error: "export failed" };
+    try {
+      const wb = new ExcelJS.Workbook();
+      await wb.xlsx.load(res.buffer);
+      let text = "";
+      for (const ws of wb.worksheets) ws.eachRow(row => row.eachCell(cell => { text += " " + cell.text; }));
+      if (!text.includes(customNo) || !text.includes("签订合同")) return { error: "export content missing" };
+      return {};
+    } catch (e) {
+      return { error: "excel parse failed: " + e.message };
+    }
+  });
+  await test("Async export job", async () => {
+    const create = await req("POST", "/api/export/jobs", { ids: [createdOrderId] });
+    if (create.status !== 202 || !create.body.jobId) return { error: "job create failed" };
+    let done = false;
+    for (let i = 0; i < 20; i++) {
+      await new Promise(r => setTimeout(r, 200));
+      const status = await req("GET", `/api/export/jobs/${create.body.jobId}`);
+      if (status.body.status === "done") { done = true; break; }
+      if (status.body.status === "error") return { error: "job error: " + (status.body.error || "") };
+    }
+    if (!done) return { error: "job timeout" };
+    const dl = await rawFetch("GET", `/api/export/jobs/${create.body.jobId}/download`);
+    return dl.status === 200 ? {} : { error: "download failed" };
+  });
+  await test("Cancelled export rejected", async () => { const r = await req("GET", "/api/export/orders?status=cancelled"); return r.status === 400 ? {} : { error: "expected 400, got " + r.status }; });
   await test("Permission (finance denied)", async () => {
-    const r2 = await req("POST", "/api/auth/login", { username: "caiwu1", password: "123456" });
-    const oldToken = token; token = r2.body.token;
-    const r3 = await req("POST", "/api/orders", { customer_name: "X", project_name: "Y" });
+    const oldToken = token;
+    const r2 = await loginUser("caiwu1", "123456");
+    const r3 = await req("POST", "/api/orders", { customer_name: "X", project_name: "Y", planned_delivery_date: "2026-08-10" });
     token = oldToken;
     return r3.body.error ? {} : { error: "finance should be denied" };
   });
-  await test("Departments (10 depts)", async () => { const r = await req("GET", "/api/departments"); return r.body.departments && r.body.departments.length >= 9 ? {} : { error: "expected 8+ depts" }; });
+  await test("Departments (12 depts)", async () => { const r = await req("GET", "/api/departments"); return r.body.departments && r.body.departments.length >= 12 ? {} : { error: "expected 12 depts" }; });
     await test("Overdue check", async () => { const r = await req("POST", "/api/notifications/check-overdue"); return typeof r.body.checked !== "undefined" ? {} : { error: "overdue check failed" }; });
   await test("Users list (admin)", async () => { const r = await req("GET", "/api/auth/users"); return r.body.users ? {} : { error: "no users" }; });
+  await test("User create and delete", async () => {
+    const username = "testuser_" + Date.now();
+    const create = await req("POST", "/api/auth/register", { username, password: "123456", name: "TestUser", role: "sales", department_id: 1 });
+    if (create.status !== 201) return { error: "create failed: " + JSON.stringify(create.body) };
+    const users = await req("GET", "/api/auth/users");
+    const u = (users.body.users || []).find(x => x.username === username);
+    if (!u) return { error: "user not found" };
+    const del = await req("DELETE", `/api/auth/users/${u.id}`);
+    return del.status === 200 ? {} : { error: "delete failed" };
+  });
   await test("Audit log", async () => { const r = await req("GET", "/api/audit"); return r.body.logs ? {} : { error: "no logs" }; });
+  await test("Audit filter by order", async () => { const r = await req("GET", `/api/audit?order_id=${createdOrderId}`); return r.body.logs ? {} : { error: "audit filter failed" }; });
+  await test("Audit filter by order number", async () => { const r = await req("GET", `/api/audit?order_no=${encodeURIComponent(customNo)}`); return r.body.logs ? {} : { error: "audit order_no filter failed" }; });
+
+  const testOrderIds = new Set([createdOrderId, roleOrderId].filter(Boolean));
+  if (process.env.SKIP_CLEANUP === '1') {
+    console.log("[cleanup] skipped (SKIP_CLEANUP=1)");
+  } else {
+    for (const id of testOrderIds) {
+      try { await req("DELETE", `/api/orders/${id}`); } catch {}
+    }
+    console.log("[cleanup] deleted test orders:", testOrderIds.size);
+  }
 
   console.log("\n=== 结果: " + passed + "/" + (passed+failed) + " 通过 ===");
   process.exit(failed > 0 ? 1 : 0);

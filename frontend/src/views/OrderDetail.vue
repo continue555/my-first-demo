@@ -1,5 +1,16 @@
 <template>
-  <div v-if="order">
+  <div v-if="loading" class="detail-state">
+    <div class="detail-spinner"></div>
+    <p>加载中...</p>
+  </div>
+  <div v-else-if="loadError" class="detail-state detail-error">
+    <p>{{ loadError }}</p>
+    <button class="btn btn-primary" @click="retry">重试</button>
+  </div>
+  <div v-else-if="!order" class="detail-state">
+    <p>暂无订单数据</p>
+  </div>
+  <div v-else>
     <div v-if="overdueInfo" class="overdue-banner" :class="overdueInfo.cssClass === 'overdue-red' ? 'overdue-red-banner' : 'overdue-green-banner'">
       {{ overdueInfo.cssClass === 'overdue-red' ? '此订单已超期！计划交货日期 ' + order.planned_delivery_date + ' 已过，请尽快处理' : '此订单如期完成（实际 ' + order.actual_delivery_date + ' <= 计划 ' + order.planned_delivery_date + '）' }}
     </div>
@@ -7,29 +18,55 @@
       <h2>订单详情 - {{ order.order_no }}</h2>
       <div class="actions">
         <button class="btn btn-outline" @click="$router.push('/orders')">返回列表</button>
-        <button class="btn btn-outline btn-sm" @click="openEdit">编辑</button>
         <button class="btn btn-outline btn-sm" @click="exportOrder">导出Excel</button>
         <button v-if="auth.canDeleteOrder" class="btn btn-danger btn-sm" @click="deleteOrder">删除订单</button>
       </div>
     </div>
 
     <div class="card">
-      <div class="card-title">基本信息</div>
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>基本信息</span>
+        <label v-if="auth.isAdmin || auth.isManagement || auth.isSales" class="btn btn-primary btn-sm" style="cursor:pointer;">
+          + 上传文件
+          <input type="file" hidden @change="onFileSelect" accept=".pdf,.doc,.docx,.xls,.xlsx,.zip,.rar,.txt,.png,.jpg,.jpeg,.gif,.webp,.bmp">
+        </label>
+      </div>
       <div class="detail-grid">
         <div class="detail-item"><div class="label">订单编号</div><div class="value">{{ order.order_no }}</div></div>
-        <div v-if="!auth.isProduction" class="detail-item"><div class="label">客户名称</div><div class="value">{{ order.customer_name }}</div></div>
-        <div class="detail-item"><div class="label">项目名称</div><div class="value">{{ order.project_name }}</div></div>
-        <div class="detail-item"><div class="label">产品型号</div><div class="value">{{ order.product_model || '-' }}</div></div>
-        <div class="detail-item"><div class="label">数量</div><div class="value">{{ order.quantity }}</div></div>
-        <div v-if="!auth.isProduction" class="detail-item"><div class="label">合同金额</div><div class="value">{{ order.contract_amount ? '¥' + Number(order.contract_amount).toLocaleString() : '-' }}</div></div>
         <div class="detail-item"><div class="label">计划交货日期</div><div class="value">{{ order.planned_delivery_date || '-' }}</div></div>
         <div class="detail-item" :class="overdueInfo?.rowClass">
-          <div class="label">实际交货日期<span v-if="overdueInfo" :class="overdueInfo.stampClass">{{ overdueInfo.stampText }}</span></div>
+          <div class="label">实际发货时间<span v-if="overdueInfo" :class="overdueInfo.stampClass">{{ overdueInfo.stampText }}</span></div>
           <div class="value" :class="overdueInfo?.cssClass">{{ order.actual_delivery_date || '-' }}</div>
         </div>
         <div class="detail-item"><div class="label">订单状态</div><div class="value"><span class="status-badge" :class="'status-' + order.status">{{ statusText(order.status) }}</span></div></div>
         <div class="detail-item"><div class="label">创建人</div><div class="value">{{ order.creator_name || '-' }}</div></div>
-        <div style="grid-column:1/-1;"><div class="label">备注</div><div class="value">{{ order.notes || '-' }}</div></div>
+      </div>
+      <div class="attachment-section">
+        <div class="attachment-title">附件</div>
+        <div v-if="uploading" style="text-align:center;padding:12px 0;color:var(--text-secondary);font-size:13px;">
+          上传中... {{ uploadProgress }}%
+          <div style="height:6px;background:#e5e7eb;border-radius:3px;max-width:300px;margin:8px auto;overflow:hidden;">
+            <div :style="{ width: uploadProgress + '%', height: '100%', background: '#1a73e8' }"></div>
+          </div>
+        </div>
+        <div v-else-if="files.length === 0" style="text-align:center;padding:12px 0;color:var(--text-secondary);font-size:13px;">暂无附件</div>
+        <div v-else class="file-list">
+          <div v-for="f in files" :key="f.id" class="file-item">
+            <div v-if="isImage(f.mime_type)" class="file-thumb" @click="previewImage(f)">
+              <img v-if="f.previewUrl" :src="f.previewUrl" :alt="f.original_name" loading="lazy">
+            </div>
+            <div v-else class="file-icon">{{ fileIcon(f.mime_type) }}</div>
+            <div class="file-info">
+              <div class="file-name" :title="f.original_name">{{ f.original_name }}</div>
+              <div class="file-meta">{{ formatSize(f.file_size) }} · {{ f.uploader_name || '未知' }} · {{ f.created_at?.slice(0,16) }}</div>
+            </div>
+            <div class="file-actions">
+              <button v-if="canPreview(f)" class="btn btn-outline btn-sm" @click="previewDocument(f)">预览</button>
+              <button class="btn btn-outline btn-sm" @click="downloadFile(f)">下载</button>
+              <button v-if="canDeleteFile(f)" class="btn btn-danger btn-sm" @click="removeFile(f.id)">删除</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -75,12 +112,12 @@
                     <template v-if="isPurchaseStage(ps)">
                       <span v-if="ps.start_date">下单时间: {{ ps.start_date }}</span>
                       <span v-if="ps.planned_end_date"> | 计划到货: {{ ps.planned_end_date }}</span>
-                      <span v-if="ps.actual_end_date"> | <span :class="getOverdueInfo(ps)?.cssClass">到货时间: {{ ps.actual_end_date }}</span></span>
+                      <span v-if="ps.actual_end_date"> | <span :class="getOverdueInfo(ps)?.cssClass">完成时间: {{ ps.actual_end_date }}</span></span>
                     </template>
                     <template v-else>
                       <span v-if="ps.start_date">开始: {{ ps.start_date }}</span>
                       <span v-if="ps.planned_end_date"> | 计划完成: {{ ps.planned_end_date }}</span>
-                      <span v-if="ps.actual_end_date"> | <span :class="getOverdueInfo(ps)?.cssClass">实际完成: {{ ps.actual_end_date }}</span></span>
+                      <span v-if="ps.actual_end_date"> | <span :class="getOverdueInfo(ps)?.cssClass">{{ isFollowUpStage(ps) ? '实际到货时间: ' + ps.actual_end_date : '实际完成: ' + ps.actual_end_date }}</span></span>
                     </template>
                     <span v-if="ps.operator_name"> | 操作人: {{ ps.operator_name }}</span>
                   </div>
@@ -92,9 +129,6 @@
                   <template v-if="auth.canOperateStage(ps)">
                     <button v-if="ps.status === 'pending'" class="btn btn-success btn-sm" @click="updateStage(ps, 'in_progress')">开始</button>
                     <button v-if="ps.status === 'in_progress'" class="btn btn-primary btn-sm" @click="updateStage(ps, 'completed')">完成</button>
-                    <button v-if="ps.status === 'in_progress'" class="btn btn-warning btn-sm" @click="updateStage(ps, 'delayed')">延期</button>
-                    <button v-if="ps.status === 'delayed'" class="btn btn-success btn-sm" @click="updateStage(ps, 'in_progress')">恢复</button>
-                    <button v-if="ps.status === 'delayed'" class="btn btn-primary btn-sm" @click="updateStage(ps, 'completed')">完成</button>
                     <button v-if="!ps.start_date || !ps.planned_end_date || auth.isAdmin || auth.isManagement" class="btn btn-outline btn-sm" @click="showTimeModal(ps)">⏱</button>
                   </template>
                   <span v-else-if="!auth.isUserDept(ps.department_id)" style="font-size:11px;color:var(--text-secondary)">无权限</span>
@@ -105,38 +139,6 @@
         </template>
       </ul>
     </div>
-
-    <!-- 附件 -->
-    <div class="card">
-      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
-        <span>附件</span>
-        <label class="btn btn-primary btn-sm" style="cursor:pointer;">
-          + 上传文件
-          <input type="file" hidden @change="onFileSelect" accept=".pdf,.doc,.docx,.xls,.xlsx,.zip,.rar,.txt,.png,.jpg,.jpeg,.gif,.webp,.bmp">
-        </label>
-      </div>
-      <div v-if="uploading" style="text-align:center;padding:20px;color:var(--text-secondary);font-size:13px;">上传中...</div>
-      <div v-else-if="files.length === 0" style="text-align:center;padding:20px;color:var(--text-secondary);font-size:13px;">暂无附件</div>
-      <div v-else class="file-list">
-        <div v-for="f in files" :key="f.id" class="file-item">
-          <div v-if="isImage(f.mime_type)" class="file-thumb" @click="previewImage(f)">
-            <img :src="getPreviewUrl(f.id)" :alt="f.original_name" loading="lazy">
-          </div>
-          <div v-else class="file-icon">{{ fileIcon(f.mime_type) }}</div>
-          <div class="file-info">
-            <div class="file-name" :title="f.original_name">{{ f.original_name }}</div>
-            <div class="file-meta">{{ formatSize(f.file_size) }} · {{ f.uploader_name || '未知' }} · {{ f.created_at?.slice(0,16) }}</div>
-          </div>
-          <div class="file-actions">
-            <button class="btn btn-outline btn-sm" @click="downloadFile(f.id)">下载</button>
-            <button v-if="canDeleteFile(f)" class="btn btn-danger btn-sm" @click="removeFile(f.id)">删除</button>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 编辑弹窗 -->
-    <OrderEditModal :visible="showEdit" :order="editForm" :show-actual-date="true" @close="showEdit = false" @save="saveEdit" />
 
     <!-- 时间设置弹窗 -->
     <div v-if="timeModal.visible" class="modal-overlay" @click.self="timeModal.visible = false">
@@ -159,7 +161,22 @@
           <button class="btn btn-outline btn-sm" @click="previewModal.visible = false">关闭</button>
         </div>
         <div class="image-preview-body">
-          <img v-if="previewModal.file" :src="getPreviewUrl(previewModal.file.id)" :alt="previewModal.file.original_name">
+          <img v-if="previewModal.file?.previewUrl" :src="previewModal.file.previewUrl" :alt="previewModal.file.original_name">
+        </div>
+      </div>
+    </div>
+    <div v-if="docPreview.visible" class="modal-overlay" @click.self="closeDocPreview()">
+      <div class="doc-preview-modal">
+        <div class="image-preview-header">
+          <span>{{ docPreview.file?.original_name }}</span>
+          <button class="btn btn-outline btn-sm" @click="closeDocPreview()">关闭</button>
+        </div>
+        <div v-if="docPreview.type === 'pdf' && docPreview.url" class="doc-preview-body pdf">
+          <iframe :src="docPreview.url"></iframe>
+        </div>
+        <div v-else class="doc-preview-body">
+          <div v-if="docLoading" style="text-align:center;color:var(--text-secondary);padding:40px 0;">加载中...</div>
+          <div ref="docPreviewBody"></div>
         </div>
       </div>
     </div>
@@ -167,15 +184,14 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
 import { useToastStore } from '@/stores/toast';
 import { useModalStore } from '@/stores/modal';
 import { api } from '@/api';
-import { uploadFile, getFiles, deleteFile, getDownloadUrl } from '@/api';
+import { uploadFile, getFiles, deleteFile, getFilePreviewTicket } from '@/api';
 import { getOverdueInfo, statusText } from '@/utils';
-import OrderEditModal from '@/components/OrderEditModal.vue';
 
 const route = useRoute();
 const router = useRouter();
@@ -185,16 +201,23 @@ const modal = useModalStore();
 
 const order = ref(null);
 const stages = ref([]);
-const showEdit = ref(false);
-const editForm = ref({});
+const loading = ref(true);
+const loadError = ref('');
 
 const timeModal = ref({ visible: false, orderId: null, stageKey: '', stageName: '', startDate: '', plannedEnd: '' });
 const files = ref([]);
 const uploading = ref(false);
+const uploadProgress = ref(0);
 const previewModal = ref({ visible: false, file: null });
+const docPreview = ref({ visible: false, file: null, type: null, url: null });
+const docPreviewBody = ref(null);
+let docxFitTimer = null;
+const docLoading = ref(false);
 
-const PURCHASE_STAGE_KEYS = ['purchase_frame', 'purchase_mold_frame', 'purchase_electrical', 'purchase_cover'];
+const PURCHASE_STAGE_KEYS = ['purchase_frame', 'purchase_mold_frame', 'purchase_electrical', 'purchase_cover', 'mold_design_purchase'];
 function isPurchaseStage(stage) { return stage && PURCHASE_STAGE_KEYS.includes(stage.stage_key); }
+const FOLLOW_UP_STAGE_KEYS = ['frame_follow_up', 'mold_frame_follow_up', 'electrical_follow_up', 'cover_follow_up', 'mold_design_follow_up'];
+function isFollowUpStage(stage) { return stage && FOLLOW_UP_STAGE_KEYS.includes(stage.stage_key); }
 
 const mainStages = computed(() => stages.value.filter(s => !s.parent_stage_key));
 const productionStages = computed(() => stages.value.filter(s => s.parent_stage_key === 'production'));
@@ -214,20 +237,36 @@ function overdueStyle(oi) {
 let pollTimer = null;
 
 async function load() {
+  if (!order.value) loading.value = true;
+  loadError.value = '';
   try {
     const data = await api.get(`/orders/${route.params.id}`);
     order.value = data.order;
     stages.value = data.stages || [];
     loadFiles();
   } catch (e) {
+    loadError.value = e.message;
     toast.show(e.message, 'error');
+  } finally {
+    loading.value = false;
   }
+}
+
+function retry() {
+  load();
 }
 
 async function loadFiles() {
   try {
     const data = await getFiles(route.params.id);
     files.value = data.files || [];
+    for (const f of files.value) {
+      if (isImage(f.mime_type)) {
+        getFilePreviewTicket(f.id)
+          .then(url => { f.previewUrl = url; })
+          .catch(() => {});
+      }
+    }
   } catch {}
 }
 
@@ -235,29 +274,32 @@ async function onFileSelect(e) {
   const file = e.target.files[0];
   if (!file) return;
   uploading.value = true;
+  uploadProgress.value = 0;
   try {
-    await uploadFile(order.value.id, file);
+    await uploadFile(order.value.id, file, undefined, progress => { uploadProgress.value = progress; });
     toast.show('文件上传成功');
     loadFiles();
   } catch (e) {
     toast.show(e.message, 'error');
   } finally {
     uploading.value = false;
+    uploadProgress.value = 0;
     e.target.value = '';
   }
 }
 
-function downloadFile(id) {
-  fetch(`/api/files/${id}/download`, {
-    headers: { Authorization: `Bearer ${sessionStorage.getItem('token')}` }
-  }).then(r => {
+function downloadFile(f) {
+  const headers = {};
+  const token = sessionStorage.getItem('token');
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  fetch(`/api/files/${f.id}/download`, { headers }).then(r => {
     if (!r.ok) throw new Error('下载失败');
     return r.blob();
   }).then(blob => {
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
     const disp = blob.type || 'application/octet-stream';
-    a.download = 'file';
+    a.download = f.original_name || 'file';
     a.click();
     URL.revokeObjectURL(a.href);
   }).catch(e => toast.show(e.message, 'error'));
@@ -282,7 +324,7 @@ function removeFile(id) {
 
 function canDeleteFile(f) {
   if (!auth.user) return false;
-  return auth.isAdmin || auth.isManagement || f.uploaded_by === auth.user.id;
+  return auth.isAdmin || auth.isManagement;
 }
 
 function fileIcon(mime) {
@@ -299,14 +341,149 @@ function isImage(mime) {
   return mime && mime.startsWith('image/');
 }
 
-function getPreviewUrl(fileId) {
-  const token = sessionStorage.getItem('token');
-  return `/api/files/${fileId}/preview?token=${token}`;
-}
-
 function previewImage(file) {
   previewModal.value = { visible: true, file };
 }
+
+function getPreviewType(f) {
+  if (!f) return null;
+  const name = (f?.original_name || '').toLowerCase();
+  if (isImage(f.mime_type)) return 'image';
+  if (f.mime_type === 'application/pdf' || name.endsWith('.pdf')) return 'pdf';
+  if (f.mime_type?.includes('word') || name.endsWith('.doc') || name.endsWith('.docx')) return 'word';
+  if (f.mime_type?.includes('sheet') || f.mime_type?.includes('excel') || /\.(xlsx?|csv)$/.test(name)) return 'excel';
+  if (f.mime_type?.startsWith('text/') || name.endsWith('.txt')) return 'text';
+  return null;
+}
+
+function canPreview(f) {
+  return !!getPreviewType(f);
+}
+
+async function previewDocument(file) {
+  const type = getPreviewType(file);
+  if (!type || type === 'image') return;
+  resetDocxFit();
+  docPreview.value = { visible: true, file, type, url: null };
+  if (!route.query.preview) {
+    router.push({ query: { ...route.query, preview: String(file.id) } });
+  }
+  docLoading.value = true;
+  try {
+    const url = await getFilePreviewTicket(file.id);
+    if (type === 'pdf') {
+      docPreview.value.url = url;
+      return;
+    }
+    const res = await fetch(url);
+    if (!res.ok) throw new Error('预览失败');
+    await new Promise(r => setTimeout(r, 50));
+    if (docPreviewBody.value) docPreviewBody.value.innerHTML = '';
+    if (type === 'word') {
+      const blob = await res.blob();
+      const { renderAsync } = await import('docx-preview');
+      await renderAsync(blob, docPreviewBody.value, undefined, {
+        className: 'docx',
+        ignoreWidth: true,
+        ignoreHeight: true,
+        breakPages: false
+      });
+      fitDocxToContainer();
+      docxFitTimer = setTimeout(() => {
+        resetDocxFit();
+        fitDocxToContainer();
+      }, 600);
+      window.addEventListener('resize', onPreviewResize);
+    } else if (type === 'excel') {
+      const XLSX = await import('xlsx');
+      const wb = XLSX.read(await res.arrayBuffer());
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      docPreviewBody.value.innerHTML = XLSX.utils.sheet_to_html(sheet);
+    } else if (type === 'text') {
+      docPreviewBody.value.textContent = await res.text();
+    }
+  } catch (e) {
+    toast.show(e.message, 'error');
+  } finally {
+    docLoading.value = false;
+  }
+}
+
+function fitDocxToContainer() {
+  const body = docPreviewBody.value;
+  const docx = body?.querySelector('.docx');
+  if (!body || !docx || !window.matchMedia('(max-width: 768px)').matches) return;
+  const wrapper = docx.parentElement?.classList.contains('docx-wrapper') ? docx.parentElement : null;
+  if (wrapper) {
+    wrapper.style.padding = '0';
+    wrapper.style.background = 'transparent';
+  }
+  docx.style.alignSelf = 'flex-start';
+  requestAnimationFrame(() => {
+    const docxRect = docx.getBoundingClientRect();
+    const bodyRect = body.getBoundingClientRect();
+    let minLeft = docxRect.left;
+    let maxRight = docxRect.right;
+    for (const el of docx.querySelectorAll('*')) {
+      const r = el.getBoundingClientRect();
+      if (r.left < minLeft) minLeft = r.left;
+      if (r.right > maxRight) maxRight = r.right;
+    }
+    const contentWidth = maxRight - minLeft;
+    const availableWidth = body.clientWidth - 32;
+    const scale = contentWidth > availableWidth ? availableWidth / contentWidth : 1;
+    const targetLeft = bodyRect.left + 16;
+    const scaledMinLeft = docxRect.left + (minLeft - docxRect.left) * scale;
+    const shift = targetLeft - scaledMinLeft;
+    docx.style.transformOrigin = 'top left';
+    docx.style.transform = scale < 1 ? `translate(${shift}px, 0) scale(${scale})` : '';
+    body.style.height = scale < 1 ? `${Math.ceil(docxRect.height * scale)}px` : '';
+    body.style.overflowX = scale < 1 ? 'hidden' : '';
+  });
+}
+
+function resetDocxFit() {
+  if (docxFitTimer) {
+    clearTimeout(docxFitTimer);
+    docxFitTimer = null;
+  }
+  const body = docPreviewBody.value;
+  const docx = body?.querySelector('.docx');
+  const wrapper = body?.querySelector('.docx-wrapper');
+  if (wrapper) {
+    wrapper.style.padding = '';
+    wrapper.style.background = '';
+  }
+  if (docx) {
+    docx.style.transform = '';
+    docx.style.transformOrigin = '';
+    docx.style.alignSelf = '';
+  }
+  if (body) {
+    body.style.height = '';
+    body.style.overflowX = '';
+  }
+}
+
+function onPreviewResize() {
+  resetDocxFit();
+  fitDocxToContainer();
+}
+
+function closeDocPreview({ fromRoute = false } = {}) {
+  resetDocxFit();
+  window.removeEventListener('resize', onPreviewResize);
+  docPreview.value.visible = false;
+  if (!fromRoute && route.query.preview) {
+    router.back();
+  }
+}
+
+watch(() => route.query.preview, (preview) => {
+  if (!preview && docPreview.value.visible) {
+    closeDocPreview({ fromRoute: true });
+  }
+});
 
 function formatSize(bytes) {
   if (!bytes) return '-';
@@ -352,36 +529,6 @@ async function saveTime() {
   }
 }
 
-function openEdit() {
-  editForm.value = { ...order.value };
-  showEdit.value = true;
-}
-
-async function saveEdit(formData) {
-  if (!formData.customer_name || !formData.project_name) {
-    toast.show('客户名称和项目名称为必填项', 'error');
-    return;
-  }
-  try {
-    const body = {
-      customer_name: formData.customer_name,
-      project_name: formData.project_name,
-      product_model: formData.product_model || '',
-      quantity: parseInt(formData.quantity) || 1,
-      contract_amount: parseFloat(formData.contract_amount) || null,
-      planned_delivery_date: formData.planned_delivery_date || null,
-      actual_delivery_date: formData.actual_delivery_date || null,
-      notes: formData.notes || ''
-    };
-    await api.put(`/orders/${order.value.id}`, body);
-    toast.show('订单更新成功');
-    showEdit.value = false;
-    load();
-  } catch (e) {
-    toast.show(e.message, 'error');
-  }
-}
-
 function deleteOrder() {
   modal.open({
     title: '确认操作',
@@ -414,6 +561,8 @@ onMounted(() => {
 });
 onUnmounted(() => {
   if (pollTimer) clearInterval(pollTimer);
+  window.removeEventListener('resize', onPreviewResize);
+  resetDocxFit();
 });
 </script>
 
@@ -490,6 +639,73 @@ onUnmounted(() => {
   text-align: center;
   border-top: 1px dashed #e5e7eb;
   margin-top: 8px;
+}
+.detail-state {
+  padding: 64px 20px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+.detail-state p { margin: 0 0 16px; }
+.detail-spinner {
+  width: 34px;
+  height: 34px;
+  margin: 0 auto 14px;
+  border: 3px solid #dbeafe;
+  border-top-color: #1a73e8;
+  border-radius: 50%;
+  animation: detail-spin 0.8s linear infinite;
+}
+@keyframes detail-spin { to { transform: rotate(360deg); } }
+.attachment-section {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border, #e5e7eb);
+}
+.attachment-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+.doc-preview-modal {
+  background: #fff;
+  border-radius: 8px;
+  max-width: 90vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.doc-preview-body {
+  padding: 16px;
+  overflow: auto;
+  background: #f8fafc;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+}
+.doc-preview-body :deep(.docx) {
+  overflow: visible;
+}
+.doc-preview-body.pdf {
+  padding: 0;
+}
+.doc-preview-body.pdf iframe {
+  width: 100%;
+  height: 70vh;
+  border: 0;
+}
+@media (max-width: 768px) {
+  .doc-preview-modal {
+    width: 100vw;
+    max-width: 100vw;
+    height: 100vh;
+    max-height: 100vh;
+    border-radius: 0;
+  }
+  .doc-preview-body.pdf iframe {
+    height: calc(100vh - 49px);
+  }
 }
 </style>
 

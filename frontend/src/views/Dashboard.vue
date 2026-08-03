@@ -5,15 +5,15 @@
     </div>
     <div class="stats-row">
       <div class="stat-card" @click="$router.push('/orders')" style="cursor:pointer;">
-        <div class="stat-icon total">📋</div>
+        <div class="stat-icon total"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg></div>
         <div class="stat-body"><div class="stat-number">{{ stats.total }}</div><div class="stat-label">总订单数</div></div>
       </div>
       <div class="stat-card" @click="$router.push('/orders')" style="cursor:pointer;">
-        <div class="stat-icon progress">🔄</div>
+        <div class="stat-icon progress"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg></div>
         <div class="stat-body"><div class="stat-number">{{ stats.inProgress }}</div><div class="stat-label">进行中</div></div>
       </div>
       <div class="stat-card">
-        <div class="stat-icon done">✅</div>
+        <div class="stat-icon done"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div>
         <div class="stat-body"><div class="stat-number">{{ stats.completed }}</div><div class="stat-label">已完成</div></div>
       </div>
     </div>
@@ -24,13 +24,14 @@
           <span class="dash-link" @click="$router.push('/orders')">查看全部 →</span>
         </div>
         <div class="dashboard-card-body">
-          <div v-if="recentOrders.length === 0" class="dash-empty">暂无订单</div>
+          <div v-if="recentOrders === null" class="dash-empty" style="visibility:hidden">暂无订单</div>
+          <div v-else-if="recentOrders.length === 0" class="dash-empty">暂无订单</div>
           <div
             v-for="o in recentOrders"
             :key="o.id"
             class="dash-order-row"
             :class="getOverdueInfo(o)?.rowClass"
-            @click="$router.push(`/orders/${o.id}`)"
+            @click="goDetail(o.id)"
           >
             <div class="dash-order-info">
               <div class="dash-order-no">
@@ -50,9 +51,8 @@
         <div class="dashboard-card" style="margin-bottom:20px;">
           <div class="dashboard-card-header"><span class="dash-title">订单概览</span></div>
           <div class="mini-stats">
-            <div class="mini-stat delay"><div class="mini-num">{{ stats.delayed }}</div><div class="mini-label">已延期</div></div>
+            <div class="mini-stat overdue"><div class="mini-num">{{ stats.overdue }}</div><div class="mini-label">超期订单</div></div>
             <div class="mini-stat wait"><div class="mini-num">{{ stats.pending }}</div><div class="mini-label">待处理</div></div>
-            <div class="mini-stat cancel" style="grid-column:1/-1;"><div class="mini-num">{{ stats.cancelled || 0 }}</div><div class="mini-label">已取消</div></div>
           </div>
         </div>
         <div class="dashboard-card">
@@ -61,7 +61,8 @@
             <span class="dash-link" @click="$router.push('/notifications')">查看全部 →</span>
           </div>
           <div class="dashboard-card-body">
-            <div v-if="recentNotifs.length === 0" class="dash-empty">暂无通知</div>
+            <div v-if="recentNotifs === null" class="dash-empty" style="visibility:hidden">暂无通知</div>
+            <div v-else-if="recentNotifs.length === 0" class="dash-empty">暂无通知</div>
             <div
               v-for="n in recentNotifs"
               :key="n.id"
@@ -85,11 +86,13 @@
 import { ref, onMounted, onUnmounted } from 'vue';
 import { api } from '@/api';
 import { getOverdueInfo, statusText } from '@/utils';
+import { navigateTo } from '@/utils/navigation';
 
-const stats = ref({ total: 0, inProgress: 0, completed: 0, delayed: 0, pending: 0, cancelled: 0 });
-const recentOrders = ref([]);
-const recentNotifs = ref([]);
+const stats = ref({ total: 0, inProgress: 0, completed: 0, overdue: 0, pending: 0 });
+const recentOrders = ref(null);
+const recentNotifs = ref(null);
 const refreshing = ref(false);
+const ready = ref(false);
 let timer = null;
 
 async function loadData() {
@@ -100,10 +103,14 @@ async function loadData() {
       api.get('/notifications?limit=5')
     ]);
     const s = statsData.stats;
-    stats.value = { total: s.total, inProgress: s.inProgress, completed: s.completed, delayed: s.delayed, pending: s.pending, cancelled: s.cancelled || 0 };
+    stats.value = { total: s.total, inProgress: s.inProgress, completed: s.completed, overdue: s.overdue, pending: s.pending };
     recentOrders.value = orderData.orders || [];
     recentNotifs.value = notifData.notifications || [];
   } catch { /* ignore */ }
+}
+
+function goDetail(id) {
+  navigateTo(`/orders/${id}`);
 }
 
 onMounted(() => {
@@ -149,9 +156,8 @@ onUnmounted(() => {
 .mini-stat { background: #fafbfc; border-radius: 10px; padding: 14px 12px; text-align: center; border: 1px solid #e5e7eb; }
 .mini-num { font-size: 22px; font-weight: 700; }
 .mini-label { font-size: 11px; color: #6b7280; margin-top: 2px; }
-.mini-stat.delay .mini-num { color: #ef4444; }
+.mini-stat.overdue .mini-num { color: #ef4444; }
 .mini-stat.wait .mini-num { color: #6b7280; }
-.mini-stat.cancel .mini-num { color: #7c3aed; }
 
 .dash-order-row { display: flex; align-items: center; padding: 14px 20px; border-bottom: 1px solid #e5e7eb; cursor: pointer; transition: background 0.15s; gap: 14px; }
 .dash-order-row:last-child { border-bottom: none; }
@@ -187,4 +193,13 @@ onUnmounted(() => {
 .overdue-red-stamp { display: inline-block; background: #dc2626; color: #fff; font-size: 11px; padding: 1px 6px; border-radius: 3px; margin-left: 6px; vertical-align: middle; }
 .overdue-green-row { background: #f0fdf4 !important; }
 .overdue-green-stamp { display: inline-block; background: #16a34a; color: #fff; font-size: 11px; padding: 1px 6px; border-radius: 3px; margin-left: 6px; vertical-align: middle; }
+
+@media (max-width: 768px) {
+  .stats-row { gap: 12px; }
+  .stat-card { padding: 16px 14px; gap: 12px; }
+  .stat-icon { width: 46px; height: 46px; border-radius: 12px; }
+  .stat-number { font-size: 24px; }
+  .dashboard-card-header { padding: 12px 14px; }
+  .dash-order-row { padding: 12px 14px; }
+}
 </style>

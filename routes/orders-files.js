@@ -4,10 +4,18 @@ const path = require('path');
 const fs = require('fs');
 const crypto = require('crypto');
 const { getDb, logAudit } = require('../database');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, requireRole } = require('../middleware/auth');
+const { createDownloadTicket, verifyDownloadTicket } = require('../lib/download-ticket');
+const { canDeleteFile } = require('../lib/file-permissions');
 
 const router = express.Router();
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
+
+function fixOriginalName(name) {
+  if (!name || /^[\x00-\x7F]*$/.test(name)) return name;
+  const decoded = Buffer.from(name, 'latin1').toString('utf8');
+  return decoded.includes('\uFFFD') ? name : decoded;
+}
 
 // 确保上传目录存在
 if (!fs.existsSync(UPLOAD_DIR)) {
@@ -89,8 +97,19 @@ router.get('/orders/:id/files', authMiddleware, async (req, res) => {
   res.json({ files });
 });
 
+// 获取短时预览票据，避免把 JWT 放在图片 URL 中
+router.get('/files/:id/ticket', authMiddleware, async (req, res) => {
+  const db = getDb();
+  const file = await db.prepare('SELECT * FROM order_files WHERE id = ?').get(req.params.id);
+  if (!file) {
+    return res.status(404).json({ error: '文件不存在' });
+  }
+  const ticket = createDownloadTicket(file.id, req.user.id);
+  res.json({ url: `/api/files/${file.id}/preview?ticket=${ticket}` });
+});
+
 // 上传文件
-router.post('/orders/:id/files', authMiddleware, async (req, res) => {
+router.post('/orders/:id/files', authMiddleware, requireRole('admin', 'management', 'sales'), async (req, res) => {
   upload.single('file')(req, res, async (err) => {
     if (err) {
       if (err instanceof multer.MulterError) {
@@ -114,32 +133,31 @@ router.post('/orders/:id/files', authMiddleware, async (req, res) => {
 
     const db = getDb();
     const { stage_key } = req.body;
+    const originalName = fixOriginalName(req.file.originalname);
 
-    await db.prepare(`
-      INSERT INTO order_files (order_id, original_name, stored_name, mime_type, file_size, uploaded_by, stage_key)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(req.params.id, req.file.originalname, req.file.filename, req.file.mimetype, req.file.size, req.user.id, stage_key || null);
+    try {
+      await db.prepare(`
+        INSERT INTO order_files (order_id, original_name, stored_name, mime_type, file_size, uploaded_by, stage_key)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(req.params.id, originalName, req.file.filename, req.file.mimetype, req.file.size, req.user.id, stage_key || null);
+    } catch (e) {
+      try { fs.unlinkSync(req.file.path); } catch {}
+      throw e;
+    }
 
     const order = await db.prepare('SELECT order_no FROM orders WHERE id = ?').get(req.params.id);
-    await logAudit(req.user.id, req.user.name, '上传附件', 'order', parseInt(req.params.id), `订单: ${order?.order_no}, 文件: ${req.file.originalname}`);
+    await logAudit(req.user.id, req.user.name, '上传附件', 'order', parseInt(req.params.id), `订单: ${order?.order_no}, 文件: ${originalName}`);
 
-    res.status(201).json({ message: '文件上传成功', filename: req.file.originalname });
+    res.status(201).json({ message: '文件上传成功', filename: originalName });
   });
 });
 
 // 预览文件（内联显示，用于图片缩略图）
-router.get('/files/:id/preview', async (req, res) => {
-  if (!req.headers.authorization && req.query.token) {
-    req.headers.authorization = 'Bearer ' + req.query.token;
-  }
-  authMiddleware(req, res, async () => {
+async function serveFileById(req, res, inline) {
   const db = getDb();
   const file = await db.prepare('SELECT * FROM order_files WHERE id = ?').get(req.params.id);
   if (!file) {
     return res.status(404).json({ error: '文件不存在' });
-  }
-  if (req.user.role !== 'admin' && req.user.role !== 'management' && file.uploaded_by !== req.user.id) {
-    return res.status(403).json({ error: '无权访问此文件' });
   }
 
   const filePath = path.join(UPLOAD_DIR, file.stored_name);
@@ -148,37 +166,39 @@ router.get('/files/:id/preview', async (req, res) => {
   }
 
   res.setHeader('Content-Type', file.mime_type || 'application/octet-stream');
-  res.setHeader('Content-Disposition', 'inline');
+  res.setHeader('Content-Disposition', inline ? 'inline' : `attachment; filename*=UTF-8''${encodeURIComponent(file.original_name)}`);
   res.setHeader('Cache-Control', 'public, max-age=3600');
   res.sendFile(filePath);
-  });
+}
+
+// 预览文件（内联显示，用于图片缩略图）
+router.get('/files/:id/preview', async (req, res) => {
+  if (req.query.ticket) {
+    const info = verifyDownloadTicket(req.query.ticket);
+    if (!info || info.fileId !== parseInt(req.params.id)) {
+      return res.status(403).json({ error: '下载链接无效或已过期' });
+    }
+    return serveFileById(req, res, true);
+  }
+  if (!req.headers.authorization && req.query.token) {
+    req.headers.authorization = 'Bearer ' + req.query.token;
+  }
+  authMiddleware(req, res, async () => serveFileById(req, res, true));
 });
 
 // 下载文件
 router.get('/files/:id/download', async (req, res) => {
-  // 支持 Authorization header 和 ?token= 两种方式
+  if (req.query.ticket) {
+    const info = verifyDownloadTicket(req.query.ticket);
+    if (!info || info.fileId !== parseInt(req.params.id)) {
+      return res.status(403).json({ error: '下载链接无效或已过期' });
+    }
+    return serveFileById(req, res, false);
+  }
   if (!req.headers.authorization && req.query.token) {
     req.headers.authorization = 'Bearer ' + req.query.token;
   }
-  authMiddleware(req, res, async () => {
-  const db = getDb();
-  const file = await db.prepare('SELECT * FROM order_files WHERE id = ?').get(req.params.id);
-  if (!file) {
-    return res.status(404).json({ error: '文件不存在' });
-  }
-  if (req.user.role !== 'admin' && req.user.role !== 'management' && file.uploaded_by !== req.user.id) {
-    return res.status(403).json({ error: '无权访问此文件' });
-  }
-
-  const filePath = path.join(UPLOAD_DIR, file.stored_name);
-  if (!fs.existsSync(filePath)) {
-    return res.status(404).json({ error: '文件已丢失' });
-  }
-
-  res.setHeader('Content-Type', file.mime_type || 'application/octet-stream');
-  res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(file.original_name)}`);
-  res.sendFile(filePath);
-  });
+  authMiddleware(req, res, async () => serveFileById(req, res, false));
 });
 
 // 删除文件
@@ -188,13 +208,8 @@ router.delete('/files/:id', authMiddleware, async (req, res) => {
   if (!file) {
     return res.status(404).json({ error: '文件不存在' });
   }
-  if (req.user.role !== 'admin' && req.user.role !== 'management' && file.uploaded_by !== req.user.id) {
+  if (!canDeleteFile(req.user)) {
     return res.status(403).json({ error: '无权访问此文件' });
-  }
-
-  // 权限：上传者自己、管理员、总经理可以删除
-  if (file.uploaded_by !== req.user.id && req.user.role !== 'admin' && req.user.role !== 'management') {
-    return res.status(403).json({ error: '无权删除此文件' });
   }
 
   const filePath = path.join(UPLOAD_DIR, file.stored_name);

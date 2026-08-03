@@ -4,9 +4,23 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>吹瓶机机械制造管理系统</title>
-    <script type="module" crossorigin src="/assets/index-CI0-ZRJE.js"></script>
-    <link rel="modulepreload" crossorigin href="/assets/vendor-RIOk2lOj.js">
-    <link rel="stylesheet" crossorigin href="/assets/index-Bz6xhP8r.css">
+    <script>
+      (function () {
+        var reloadKey = '__codex_chunk_reload__';
+        function reloadOnce() {
+          if (sessionStorage.getItem(reloadKey)) return;
+          sessionStorage.setItem(reloadKey, '1');
+          window.location.reload();
+        }
+        window.addEventListener('error', function (event) {
+          if (event.target && event.target.tagName === 'SCRIPT' && event.target.src) reloadOnce();
+        }, true);
+        window.addEventListener('vite:preloadError', reloadOnce);
+      })();
+    </script>
+    <script type="module" crossorigin src="/assets/index-D6WHY3Js.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/vendor-CPCR6Zsj.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-B4rph_Ox.css">
   </head>
   <body>
     <div id="app"></div>

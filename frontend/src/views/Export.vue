@@ -24,7 +24,7 @@
         <button class="btn btn-outline" @click="exportByStatus('pending')">未开始</button>
         <button class="btn btn-outline" @click="exportByStatus('in_progress')">进行中</button>
         <button class="btn btn-outline" @click="exportByStatus('completed')">已完成</button>
-        <button class="btn btn-outline" @click="exportByStatus('delayed')">已延期</button>
+        
       </div>
     </div>
   </div>
@@ -33,17 +33,28 @@
 <script setup>
 import { ref } from 'vue';
 import { api } from '@/api';
+import { createExportJob, getExportJob, downloadExportJob } from '@/api';
 import { useToastStore } from '@/stores/toast';
 
 const toast = useToastStore();
 const showStatus = ref(false);
 const loading = ref(false);
 
-async function exportAll() {
+async function runExport(payload) {
   loading.value = true;
   try {
-    await api.download('/export/orders');
-    toast.show('导出成功');
+    const { jobId } = await createExportJob(payload);
+    for (let i = 0; i < 600; i++) {
+      await new Promise(r => setTimeout(r, 1000));
+      const job = await getExportJob(jobId);
+      if (job.status === 'done') {
+        await downloadExportJob(jobId);
+        toast.show('导出成功');
+        return;
+      }
+      if (job.status === 'error') throw new Error(job.error || '导出失败');
+    }
+    throw new Error('导出超时，请重试');
   } catch (e) {
     toast.show(e.message, 'error');
   } finally {
@@ -51,15 +62,11 @@ async function exportAll() {
   }
 }
 
+async function exportAll() {
+  return runExport({});
+}
+
 async function exportByStatus(status) {
-  loading.value = true;
-  try {
-    await api.download(`/export/orders${status ? '?status=' + status : ''}`);
-    toast.show('导出成功');
-  } catch (e) {
-    toast.show(e.message, 'error');
-  } finally {
-    loading.value = false;
-  }
+  return runExport({ status: status || undefined });
 }
 </script>

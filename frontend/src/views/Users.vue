@@ -5,10 +5,7 @@
       <button class="btn btn-primary" @click="showCreate = true">+ 新增用户</button>
     </div>
     <div class="card">
-      <div v-if="users.length === 0" class="empty-state">
-        <div class="icon">👥</div>
-        <p>暂无用户</p>
-      </div>
+      <div v-if="users.length === 0" class="empty-state"><div class="icon">👥</div><p>暂无用户</p></div>
       <div v-else class="table-wrapper">
         <table>
           <thead><tr><th>用户名</th><th>姓名</th><th>角色</th><th>部门</th><th>操作</th></tr></thead>
@@ -28,7 +25,6 @@
         </table>
       </div>
     </div>
-
     <!-- 新增用户 -->
     <div v-if="showCreate" class="modal-overlay" @click.self="showCreate = false">
       <div class="modal">
@@ -44,6 +40,8 @@
             <option value="sales">销售</option>
             <option value="production">生产</option>
             <option value="finance">财务</option>
+            <option value="mold">模具管理</option>
+            <option value="material_follow">物料跟进</option>
           </select>
         </div>
         <div class="form-group"><label>部门</label>
@@ -56,7 +54,11 @@
             <option value="5">采购部</option>
             <option value="6">仓库部</option>
             <option value="7">装配部</option>
-            <option value="8">调试部</option>\n<option value="9">发货部</option>\n<option value="10">审批部</option>
+            <option value="8">调试部</option>
+            <option value="9">发货部</option>
+            <option value="10">审批部</option>
+            <option value="11">模具部</option>
+            <option value="12">物料跟进部</option>
           </select>
         </div>
         <div class="modal-actions">
@@ -78,6 +80,8 @@
             <option value="sales">销售</option>
             <option value="production">生产</option>
             <option value="finance">财务</option>
+            <option value="mold">模具管理</option>
+            <option value="material_follow">物料跟进</option>
           </select>
         </div>
         <div class="form-group"><label>部门</label>
@@ -90,7 +94,11 @@
             <option value="5">采购部</option>
             <option value="6">仓库部</option>
             <option value="7">装配部</option>
-            <option value="8">调试部</option>\n<option value="9">发货部</option>\n<option value="10">审批部</option>
+            <option value="8">调试部</option>
+            <option value="9">发货部</option>
+            <option value="10">审批部</option>
+            <option value="11">模具部</option>
+            <option value="12">物料跟进部</option>
           </select>
         </div>
         <div class="modal-actions">
@@ -119,11 +127,12 @@ import { ref, onMounted } from 'vue';
 import { api } from '@/api';
 import { useToastStore } from '@/stores/toast';
 import { useModalStore } from '@/stores/modal';
+import { roleLabels } from '@/utils/labels';
 
 const toast = useToastStore();
 const modal = useModalStore();
 const users = ref([]);
-const roleNames = { admin: '管理员', management: '总经理', sales: '销售', production: '生产', finance: '财务' };
+const roleNames = roleLabels;
 
 const showCreate = ref(false);
 const newUser = ref({ username: '', password: '', name: '', role: '', department_id: '' });
@@ -224,8 +233,10 @@ async function doResetPwd() {
   }
 }
 
-onMounted(load);
-</script>
+// 立即加载数据
+load();
 
+
+</script>
 <style scoped>
 </style>

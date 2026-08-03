@@ -1,14 +1,18 @@
 import { defineStore } from 'pinia';
 import { ref, computed } from 'vue';
 import { api } from '@/api';
+import { canOperateStage as canOperateStageRule, isUserDept as isUserDeptRule } from '@/utils/stage-permissions';
 
 export const useAuthStore = defineStore('auth', () => {
-  const token = ref(sessionStorage.getItem('token') || '');
+  const token = ref(sessionStorage.getItem('token') || (sessionStorage.getItem('auth_mode') === 'cookie' ? 'cookie' : ''));
   const user = ref(null);
 
   try {
     const saved = sessionStorage.getItem('user');
     if (saved) user.value = JSON.parse(saved);
+    if (user.value && !sessionStorage.getItem('session_user_id')) {
+      sessionStorage.setItem('session_user_id', String(user.value.id));
+    }
   } catch { /* ignore */ }
 
   const isLoggedIn = computed(() => !!token.value && !!user.value);
@@ -17,6 +21,8 @@ export const useAuthStore = defineStore('auth', () => {
   const isSales = computed(() => user.value?.role === 'sales');
   const isFinance = computed(() => user.value?.role === 'finance');
   const isProduction = computed(() => user.value?.role === 'production');
+  const isMold = computed(() => user.value?.role === 'mold');
+  const isMaterialFollow = computed(() => user.value?.role === 'material_follow');
 
   const canViewDashboard = computed(() => {
     return ['admin', 'management', 'sales', 'finance'].includes(user.value?.role);
@@ -32,39 +38,27 @@ export const useAuthStore = defineStore('auth', () => {
 
   async function login(username, password) {
     const data = await api.post('/auth/login', { username, password });
-    token.value = data.token;
+    token.value = 'cookie';
     user.value = data.user;
-    sessionStorage.setItem('token', data.token);
+    sessionStorage.removeItem('token');
+    sessionStorage.setItem('auth_mode', 'cookie');
     sessionStorage.setItem('user', JSON.stringify(data.user));
+    sessionStorage.setItem('session_user_id', String(data.user.id));
   }
 
-  function logout() {
+  async function logout() {
+    try { await api.post('/auth/logout'); } catch {}
     token.value = '';
     user.value = null;
     sessionStorage.clear();
   }
 
   function canOperateStage(stage) {
-    if (!user.value) return false;
-    const role = user.value.role;
-    if (role === 'admin' || role === 'management') return true;
-    const deptId = stage.department_id;
-    if (!deptId) return false;
-    if (role === 'sales' && deptId === 1) return true;
-    if (role === 'finance' && deptId === 3) return true;
-    if (role === 'production') {
-      const userDeptId = user.value.department_id;
-      const childIds = user.value.child_dept_ids || [];
-      return deptId === userDeptId || childIds.includes(deptId);
-    }
-    return false;
+    return canOperateStageRule(user.value, stage);
   }
 
   function isUserDept(deptId) {
-    if (!user.value || !deptId) return false;
-    if (user.value.role === 'admin' || user.value.role === 'management') return true;
-    const childIds = user.value.child_dept_ids || [];
-    return deptId === user.value.department_id || childIds.includes(deptId);
+    return isUserDeptRule(user.value, deptId);
   }
 
     async function refreshUser() {
@@ -72,6 +66,11 @@ export const useAuthStore = defineStore('auth', () => {
     try {
       const data = await api.get('/auth/me');
       if (data.user) {
+        const boundUserId = sessionStorage.getItem('session_user_id');
+        if (boundUserId && String(data.user.id) !== boundUserId) {
+          await logout();
+          return;
+        }
         user.value = data.user;
         sessionStorage.setItem('user', JSON.stringify(data.user));
       }
@@ -81,7 +80,7 @@ export const useAuthStore = defineStore('auth', () => {
   async function refreshUnreadCount() { try { const d = await api.get("/notifications?unread=true"); unreadCount.value = d.unreadCount || 0; } catch {} }
 
   return {
-    token, user, isLoggedIn, isAdmin, isManagement, isSales, isFinance, isProduction,
+    token, user, isLoggedIn, isAdmin, isManagement, isSales, isFinance, isProduction, isMold, isMaterialFollow,
     canViewDashboard, canManageOrders, canDeleteOrder,
     unreadCount, refreshUnreadCount, login, logout, refreshUser, canOperateStage, isUserDept
   };

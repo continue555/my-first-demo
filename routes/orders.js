@@ -1,13 +1,94 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const { getDb, logAudit } = require('../database');
 const { authMiddleware, requireRole } = require('../middleware/auth');
 const STAGE_DEFINITIONS = require('../shared/stage-defs.json');
+const sanitize = require('../lib/sanitize');
+const { canOperateStage } = require('../lib/stage-permissions');
+const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 
 const router = express.Router();
 
-function sanitize(str) {
-  if (!str) return "";
-  return String(str).replace(/[<>"']/g, '').slice(0, 200);
+const ORDER_STATUSES = ['pending', 'in_progress', 'completed', 'delayed'];
+const STAGE_STATUSES = ['pending', 'in_progress', 'completed'];
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+function cleanText(value, max) {
+  if (value === undefined || value === null) return '';
+  return sanitize(String(value).trim()).slice(0, max);
+}
+
+function validateDate(value) {
+  if (value === undefined || value === null || value === '') return { ok: true, value: null };
+  if (typeof value !== 'string' || !DATE_RE.test(value) || Number.isNaN(new Date(value).getTime())) {
+    return { ok: false, error: '日期格式不正确，应为 YYYY-MM-DD' };
+  }
+  return { ok: true, value };
+}
+
+const STAGE_DT_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2})?$/;
+
+function validateStageDateTime(value) {
+  if (value === undefined || value === null || value === '') return { ok: true, value: null };
+  const str = String(value).slice(0, 16);
+  if (!STAGE_DT_RE.test(str) || Number.isNaN(new Date(str).getTime())) {
+    return { ok: false, error: '时间格式不正确' };
+  }
+  return { ok: true, value: str };
+}
+
+function validateOrderInput(body, create) {
+  const data = {};
+  const has = key => body[key] !== undefined;
+
+  if (create || has('customer_name')) {
+    const customer = cleanText(body.customer_name, 200);
+    if (!customer) return { error: '客户名称为必填项' };
+    data.customer_name = customer;
+  }
+  if (create || has('project_name')) {
+    const project = cleanText(body.project_name, 200);
+    if (!project) return { error: '项目名称为必填项' };
+    data.project_name = project;
+  }
+  if (has('product_model')) {
+    const product = body.product_model === null || body.product_model === undefined ? '' : cleanText(body.product_model, 200);
+    data.product_model = product || null;
+  }
+  if (has('quantity')) {
+    const quantity = Number(body.quantity);
+    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100000) {
+      return { error: '数量必须是 1-100000 的整数' };
+    }
+    data.quantity = quantity;
+  }
+  if (has('contract_amount')) {
+    const amount = body.contract_amount === '' || body.contract_amount === null ? null : Number(body.contract_amount);
+    if (amount !== null && (!Number.isFinite(amount) || amount < 0 || amount > 1000000000000)) {
+      return { error: '合同金额必须是非负数' };
+    }
+    data.contract_amount = amount;
+  }
+  if (create || has('planned_delivery_date')) {
+    const date = validateDate(body.planned_delivery_date);
+    if (!date.ok) return { error: date.error };
+    if (create && !date.value) return { error: '计划交货日期为必填项' };
+    data.planned_delivery_date = date.value;
+  }
+  if (has('actual_delivery_date')) {
+    const date = validateDate(body.actual_delivery_date);
+    if (!date.ok) return { error: date.error };
+    data.actual_delivery_date = date.value;
+  }
+  if (has('status')) {
+    if (!ORDER_STATUSES.includes(body.status)) return { error: '不支持的订单状态' };
+    data.status = body.status;
+  }
+  if (has('notes')) {
+    data.notes = body.notes === null || body.notes === undefined ? null : cleanText(body.notes, 2000);
+  }
+  return { data };
 }
 
 // 生成订单编号
@@ -49,8 +130,8 @@ router.get('/', authMiddleware, async (req, res) => {
   const params = [];
 
   if (search) {
-    where += ' AND (o.order_no LIKE ? OR o.customer_name LIKE ? OR o.project_name LIKE ?)';
-    params.push(`%${search}%`, `%${search}%`, `%${search}%`);
+    where += ' AND o.order_no LIKE ?';
+    params.push(`%${search}%`);
   }
   if (status) {
     where += ' AND o.status = ?';
@@ -93,12 +174,23 @@ router.get('/', authMiddleware, async (req, res) => {
 router.get('/stats', authMiddleware, async (req, res) => {
   const db = getDb();
   const stats = {
-    total: (await db.prepare('SELECT COUNT(*) as cnt FROM orders').get()).cnt,
-    inProgress: (await db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE status = 'in_progress'").get()).cnt,
-    completed: (await db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE status = 'completed'").get()).cnt,
-    delayed: (await db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE status = 'delayed'").get()).cnt,
-    pending: (await db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE status = 'pending'").get()).cnt,
-    cancelled: (await db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE status = 'cancelled'").get()).cnt,
+    total: Number((await db.prepare('SELECT COUNT(*) as cnt FROM orders').get()).cnt),
+    inProgress: Number((await db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE status = 'in_progress'").get()).cnt),
+    completed: Number((await db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE status = 'completed'").get()).cnt),
+    pending: Number((await db.prepare("SELECT COUNT(*) as cnt FROM orders WHERE status = 'pending'").get()).cnt),
+    overdue: Number((await db.prepare(`
+      SELECT COUNT(*) as cnt FROM orders
+      WHERE (
+        status NOT IN ('completed', 'cancelled')
+        AND planned_delivery_date IS NOT NULL
+        AND planned_delivery_date::date < (NOW() AT TIME ZONE 'Asia/Shanghai')::date
+      ) OR (
+        status = 'completed'
+        AND planned_delivery_date IS NOT NULL
+        AND actual_delivery_date IS NOT NULL
+        AND actual_delivery_date::date > planned_delivery_date::date
+      )
+    `).get()).cnt),
   };
   res.json({ stats });
 });
@@ -106,20 +198,22 @@ router.get('/stats', authMiddleware, async (req, res) => {
 // 创建订单
 router.post('/', authMiddleware, requireRole('admin', 'management', 'sales'), async (req, res) => {
   const db = getDb();
-  const { customer_name, project_name, product_model, quantity, contract_amount, planned_delivery_date, notes } = req.body;
-  if (!customer_name || !project_name) return res.status(400).json({ error: '客户名称和项目名称为必填项' });
+  const validation = validateOrderInput(req.body, true);
+  if (validation.error) return res.status(400).json({ error: validation.error });
+  const v = validation.data;
 
-  const cleanCustomer = sanitize(customer_name);
-  const cleanProject = sanitize(project_name);
-  const cleanProduct = sanitize(product_model);
-  const cleanNotes = sanitize(notes);
-
-  const orderNo = generateOrderNo();
+  const rawOrderNo = req.body.order_no === undefined || req.body.order_no === null ? '' : String(req.body.order_no);
+  const customOrderNo = rawOrderNo.trim() ? cleanText(rawOrderNo, 50) : null;
+  if (customOrderNo) {
+    const exists = await db.prepare('SELECT id FROM orders WHERE order_no = ?').get(customOrderNo);
+    if (exists) return res.status(400).json({ error: '订单编号已存在' });
+  }
+  const orderNo = customOrderNo || generateOrderNo();
 
   const result = await db.prepare(`
     INSERT INTO orders (order_no, customer_name, project_name, product_model, quantity, contract_amount, planned_delivery_date, status, notes, created_by)
     VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
-  `).run(orderNo, cleanCustomer, cleanProject, cleanProduct, quantity || 1, contract_amount ?? null, planned_delivery_date ?? null, cleanNotes, req.user.id);
+  `).run(orderNo, v.customer_name, v.project_name, v.product_model ?? null, v.quantity ?? 1, v.contract_amount ?? null, v.planned_delivery_date ?? null, v.notes ?? null, req.user.id);
 
   const orderId = result.lastInsertRowid;
 
@@ -129,12 +223,11 @@ router.post('/', authMiddleware, requireRole('admin', 'management', 'sales'), as
     VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
   `);
 
-  STAGE_DEFINITIONS.forEach(async (stage) => {
-    insertStage.run(orderId, stage.key, stage.name, stage.order, stage.parentKey, stage.deptId, stage.dependsOn);
-  });
-  await db.save();
+  await Promise.all(STAGE_DEFINITIONS.map(stage =>
+    insertStage.run(orderId, stage.key, stage.name, stage.order, stage.parentKey, stage.deptId, stage.dependsOn)
+  ));
 
-  await logAudit(req.user.id, req.user.name, "创建订单", "order", orderId, `订单编号: ${orderNo}, 客户: ${customer_name}`);
+  await logAudit(req.user.id, req.user.name, "创建订单", "order", orderId, `订单编号: ${orderNo}, 客户: ${v.customer_name}`);
 
   res.status(201).json({ message: '订单创建成功', orderId, orderNo });
 });
@@ -161,19 +254,16 @@ router.get('/:id', authMiddleware, async (req, res) => {
 });
 
 // 更新订单
-router.put('/:id', authMiddleware, async (req, res) => {
+router.put('/:id', authMiddleware, requireRole('admin', 'management', 'sales'), async (req, res) => {
   const db = getDb();
   const order = await db.prepare('SELECT * FROM orders WHERE id = ?').get(req.params.id);
   if (!order) {
     return res.status(404).json({ error: '订单不存在' });
   }
 
-  const { customer_name, project_name, product_model, quantity, contract_amount, planned_delivery_date, actual_delivery_date, status, notes } = req.body;
-
-  const cleanCustomer = customer_name ? sanitize(customer_name) : null;
-  const cleanProject = project_name ? sanitize(project_name) : null;
-  const cleanProduct = product_model ? sanitize(product_model) : null;
-  const cleanNotes = notes !== undefined ? sanitize(notes) : null;
+  const validation = validateOrderInput(req.body, false);
+  if (validation.error) return res.status(400).json({ error: validation.error });
+  const v = validation.data;
 
   await db.prepare(`
     UPDATE orders SET
@@ -188,7 +278,7 @@ router.put('/:id', authMiddleware, async (req, res) => {
       notes = COALESCE(?, notes),
       updated_at = datetime('now', '+8 hours')
     WHERE id = ?
-  `).run(cleanCustomer, cleanProject, cleanProduct, quantity ?? null, contract_amount ?? null, planned_delivery_date ?? null, actual_delivery_date ?? null, status ?? null, cleanNotes ?? null, req.params.id);
+  `).run(v.customer_name ?? null, v.project_name ?? null, v.product_model ?? null, v.quantity ?? null, v.contract_amount ?? null, v.planned_delivery_date ?? null, v.actual_delivery_date ?? null, v.status ?? null, v.notes ?? null, req.params.id);
 
   await logAudit(req.user.id, req.user.name, "编辑订单", "order", parseInt(req.params.id), `订单编号: ${order.order_no}`);
 
@@ -204,7 +294,11 @@ router.delete('/:id', authMiddleware, requireRole('admin', 'management', 'sales'
   }
 
   const orderNo = order.order_no;
+  const files = await db.prepare('SELECT stored_name FROM order_files WHERE order_id = ?').all(req.params.id);
   await db.prepare('DELETE FROM orders WHERE id = ?').run(req.params.id);
+  for (const file of files) {
+    try { fs.unlinkSync(path.join(UPLOAD_DIR, file.stored_name)); } catch {}
+  }
   await logAudit(req.user.id, req.user.name, "删除订单", "order", parseInt(req.params.id), `订单编号: ${orderNo}`);
 
   res.json({ message: '删除成功' });
@@ -215,6 +309,9 @@ router.put('/:id/stages/:stageKey', authMiddleware, async (req, res) => {
   const db = getDb();
   const { id, stageKey } = req.params;
   const { status, notes } = req.body;
+  if (!STAGE_STATUSES.includes(status)) {
+    return res.status(400).json({ error: '不支持的流程状态' });
+  }
 
   const order = await db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
   if (!order) {
@@ -227,27 +324,17 @@ router.put('/:id/stages/:stageKey', authMiddleware, async (req, res) => {
   }
 
   // 权限校验：检查用户是否有权操作此节点
-  if (req.user.role !== 'admin' && req.user.role !== 'management') {
-    const deptId = stage.department_id;
-    if (!deptId) {
-      return res.status(403).json({ error: '该节点无负责部门，请联系管理员' });
-    }
-    let authorized = false;
-    if (req.user.role === 'sales' && deptId === 1) authorized = true;
-    if (req.user.role === 'finance' && deptId === 3) authorized = true;
-    if (req.user.role === 'production') {
-      const childDeptIds = await require('../middleware/auth').getDepartmentTreeIds(req.user.department_id);
-      authorized = deptId === req.user.department_id || childDeptIds.includes(deptId);
-    }
-    if (!authorized) {
-      return res.status(403).json({ error: '您没有权限操作此流程节点' });
-    }
+  if (req.user.role !== 'admin' && req.user.role !== 'management' && !(await canOperateStage(req.user, stage))) {
+    return res.status(403).json({ error: stage.department_id ? '您没有权限操作此流程节点' : '该节点无负责部门，请联系管理员' });
   }
 
   const now = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 16);
 
   // 如果改为进行中，检查前置依赖
   if (status === 'in_progress') {
+    if (stage.status === 'pending' && (!stage.start_date || !stage.planned_end_date)) {
+      return res.status(400).json({ error: '请先设置开始时间和计划完成时间' });
+    }
     const depCheck = await checkDependency(id, stageKey);
     if (!depCheck.ok) {
       return res.status(400).json({ error: depCheck.message });
@@ -291,20 +378,11 @@ router.put('/:id/stages/:stageKey', authMiddleware, async (req, res) => {
     nextStages.forEach(async (nextStage) => {
       if (nextStage.deptId) {
         await db.prepare(`
-          INSERT INTO notifications (order_id, message, recipient_dept_id)
-          VALUES (?, ?, ?)
-        `).run(id, `订单 ${order.order_no} 的"${stageDef.name}"已完成，请开始"${nextStage.name}"`, nextStage.deptId);
+          INSERT INTO notifications (order_id, message, recipient_dept_id, source_key)
+          VALUES (?, ?, ?, ?)
+        `).run(id, `订单 ${order.order_no} 的"${stageDef.name}"已完成，请开始"${nextStage.name}"`, nextStage.deptId, `stage_completed:${id}:${stageKey}:${nextStage.key}`);
       }
     });
-  }
-  // 延期
-  else if (status === 'delayed') {
-    await db.prepare(`
-      UPDATE process_stages SET status = ?, notes = COALESCE(?, notes), operator_id = ?, operator_name = ?, updated_at = datetime('now', '+8 hours')
-      WHERE order_id = ? AND stage_key = ?
-    `).run(status, notes ?? null, req.user.id, req.user.name, id, stageKey);
-
-    await db.prepare("UPDATE orders SET status = 'delayed', updated_at = datetime('now', '+8 hours') WHERE id = ?").run(id);
   }
   else {
     await db.prepare(`
@@ -323,6 +401,13 @@ router.put('/:id/stages/:stageKey/time', authMiddleware, async (req, res) => {
   const db = getDb();
   const { id, stageKey } = req.params;
   const { start_date, planned_end_date } = req.body;
+  const start = validateStageDateTime(start_date);
+  const planned = validateStageDateTime(planned_end_date);
+  if (!start.ok) return res.status(400).json({ error: start.error });
+  if (!planned.ok) return res.status(400).json({ error: planned.error });
+  if (start.value && planned.value && new Date(start.value) > new Date(planned.value)) {
+    return res.status(400).json({ error: '开始时间不能晚于计划完成时间' });
+  }
 
   const stage = await db.prepare('SELECT * FROM process_stages WHERE order_id = ? AND stage_key = ?').get(id, stageKey);
   if (!stage) {
@@ -337,7 +422,7 @@ router.put('/:id/stages/:stageKey/time', authMiddleware, async (req, res) => {
   await db.prepare(`
     UPDATE process_stages SET start_date = COALESCE(?, start_date), planned_end_date = COALESCE(?, planned_end_date), updated_at = datetime('now', '+8 hours')
     WHERE order_id = ? AND stage_key = ?
-  `).run(start_date ?? null, planned_end_date ?? null, id, stageKey);
+  `).run(start.value ?? null, planned.value ?? null, id, stageKey);
 
   res.json({ message: '时间更新成功' });
 });
