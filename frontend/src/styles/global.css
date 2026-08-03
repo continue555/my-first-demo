@@ -120,6 +120,20 @@ tr:hover td { background: #f8fafc; }
 .progress-bar-bg { height: 6px; background: #e2e8f0; border-radius: 3px; overflow: hidden; min-width: 80px; }
 .progress-bar-fill { height: 100%; background: linear-gradient(90deg, var(--primary), var(--success)); border-radius: 3px; transition: width 0.5s ease; }
 
+.file-list { display: flex; flex-direction: column; gap: 8px; }
+.file-item {
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+  background: #fff; border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(15,23,42,0.04); flex-wrap: wrap;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.file-item:hover { border-color: #c7d2fe; box-shadow: var(--shadow); }
+.file-icon { font-size: 22px; flex-shrink: 0; }
+.file-info { flex: 1; min-width: 0; }
+.file-name { font-weight: 600; font-size: 13px; overflow-wrap: anywhere; }
+.file-meta { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+.file-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
 .stage-list { list-style: none; padding: 4px 0; }
 .stage-item {
   display: flex; align-items: flex-start; gap: 14px; padding: 14px 16px;

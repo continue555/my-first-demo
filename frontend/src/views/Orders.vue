@@ -342,4 +342,15 @@ onUnmounted(() => {
   gap: 8px;
   margin-top: 12px;
 }
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.filter-row span {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
 </style>
