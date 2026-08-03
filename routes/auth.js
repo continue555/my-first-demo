@@ -7,6 +7,8 @@ const crypto = require('crypto');
 
 const router = express.Router();
 
+const ALLOWED_ROLES = ['admin', 'management', 'sales', 'production', 'finance', 'mold', 'material_follow'];
+
 function validatePassword(pwd) {
   if (!pwd || pwd.length < 6) return '密码至少6位';
   return null;
@@ -177,6 +179,7 @@ router.put('/change-password', authMiddleware, async (req, res) => {
 // 新增用户
 router.post('/register', authMiddleware, requireRole('admin'), async (req, res) => {
   const { username, password, name, department_id, role } = req.body;
+  if (!ALLOWED_ROLES.includes(role)) return res.status(400).json({ error: '不支持的角色类型' });
   if (!username || !password || !name || !role) return res.status(400).json({ error: '请填写完整信息' });
 
   const cleanUsername = sanitize(username);
@@ -213,6 +216,7 @@ router.delete('/users/:id', authMiddleware, requireRole('admin'), async (req, re
 // 修改用户信息
 router.put('/users/:id', authMiddleware, requireRole('admin'), async (req, res) => {
   const { name, department_id, role } = req.body;
+  if (role && !ALLOWED_ROLES.includes(role)) return res.status(400).json({ error: '不支持的角色类型' });
 
   const cleanName = name ? sanitize(name) : undefined;
 
