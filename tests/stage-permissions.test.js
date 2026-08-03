@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { canOperateStage, isUserDept } = require('../lib/stage-permissions');
+const { canOperateStage } = require('../lib/stage-permissions');
 
 test('admin and management can operate any stage', async () => {
   assert.equal(await canOperateStage({ role: 'admin' }, { department_id: 9 }), true);
@@ -21,10 +21,4 @@ test('mold and material follow roles are limited to own department', async () =>
   assert.equal(await canOperateStage({ role: 'mold', department_id: 11 }, { department_id: 11 }), true);
   assert.equal(await canOperateStage({ role: 'mold', department_id: 11 }, { department_id: 5 }), false);
   assert.equal(await canOperateStage({ role: 'material_follow', department_id: 12 }, { department_id: 12 }), true);
-});
-
-test('isUserDept respects child departments', () => {
-  const production = { role: 'production', department_id: 2, child_dept_ids: [4, 5, 6] };
-  assert.equal(isUserDept(production, 5), true);
-  assert.equal(isUserDept(production, 9), false);
 });

@@ -38,7 +38,6 @@
                 {{ o.order_no }}
                 <span v-if="getOverdueInfo(o)" :class="getOverdueInfo(o).stampClass">{{ getOverdueInfo(o).stampText }}</span>
               </div>
-              <div class="dash-order-customer">{{ o.customer_name }} · {{ o.project_name }}</div>
             </div>
             <span class="status-badge" :class="'status-' + o.status">{{ statusText(o.status) }}</span>
             <div class="dash-order-progress">
@@ -164,7 +163,6 @@ onUnmounted(() => {
 .dash-order-row:hover { background: #f8fafc; }
 .dash-order-info { flex: 1; min-width: 0; }
 .dash-order-no { font-size: 13px; font-weight: 600; }
-.dash-order-customer { font-size: 12px; color: #6b7280; margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dash-order-progress { width: 90px; flex-shrink: 0; }
 .progress-bar-bg { height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
 .progress-bar-fill { height: 100%; background: #0d9488; border-radius: 3px; transition: width 0.3s; }
