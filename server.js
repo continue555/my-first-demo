@@ -9,6 +9,7 @@ const { initDatabase } = require('./database');
 const STALE_ASSET_ALIASES = require('./lib/stale-asset-map.json');
 const { csrfProtection } = require('./middleware/csrf');
 const exportRoutes = require('./routes/export');
+const exportService = require('./services/export-service');
 const ASSET_DIR = path.join(__dirname, 'public', 'assets');
 const INDEX_HTML = path.join(__dirname, 'public', 'index.html');
 
@@ -120,7 +121,7 @@ app.use((err, req, res, next) => {
 // 异步初始化数据库后启动服务器
 async function start() {
   await initDatabase();
-  exportRoutes.loadExportJobs();
+  exportService.loadExportJobs();
   app.listen(PORT, () => {
     console.log(`服务器已启动: http://localhost:${PORT}`);
     console.log(`默认账号: admin / 123456`);

@@ -20,12 +20,14 @@
 
 ## 近期完成（2026-08-03）
 
+- 架构：auth/附件/导出业务已拆 service（`auth-service`、`files-service`、`export-service`），routes 全部为薄路由
+- 依赖：后端 exceljs 依赖的 uuid 已通过 npm overrides 升级至 11.1.1，后端生产依赖审计 0 漏洞（无需破坏性降级 exceljs）
 - 移动端体验：底部导航、订单卡片、筛选保留、预览全屏
 - 安全：HttpOnly Cookie + CSRF、限流持久化、角色白名单、附件权限、参数校验、stats 接口按角色限制
 - 测试：API 50 项、单元 19 项、压力测试（并发建单/阶段推进/50 单导出）、E2E、依赖审计
 - 并发修复：阶段完成通知插入改为 `ON CONFLICT DO NOTHING`
 - 依赖：xlsx 已替换为 read-excel-file；Vite 升级 7.3.6，前端审计 0 漏洞；zod 接入关键写接口
-- 架构：订单/审计/通知业务已拆 service；结构化日志
+- 架构：订单/审计/通知/auth/附件/导出业务已拆 service；结构化日志
 - 运维：恢复演练、服务器端部署与回滚、健康检查、定时任务、日志查询
 - 文档：操作文档已与系统同步
 
@@ -33,14 +35,13 @@
 
 - 历史一次性脚本（check_db/check_order/migrate_stages/migrate_to_pg）和 Docker 文件：用户明确保留，不删
 - `MONITOR_WEBHOOK` 未配置，配置后健康检查失败可推送告警
-- 后端仍剩 2 个中危（exceljs → uuid），修复需破坏性降级，暂缓
 - 真机（iOS/Android/微信）兼容性未做长期验证
 - 备份“恢复演练”已通过一次，建议每周由定时任务持续验证
 
 ## 架构速览
 
-- `services/`：order-service、audit-service、notifications-service
-- `routes/`：薄路由；auth/orders-files/export 仍含部分业务，可继续拆分
+- `services/`：order-service、audit-service、notifications-service、auth-service、files-service、export-service
+- `routes/`：薄路由，仅保留请求/响应与中间件编排
 - `lib/`：overdue、sanitize、stage-permissions、validators(zod)、download-ticket、file-permissions、cookies、dept-filter
 - `migrations/`：PostgreSQL 自动迁移（15 个版本）
 - `e2e/`、`tests/`：Playwright E2E、Node 单元测试
