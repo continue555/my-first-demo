@@ -1,10 +1,12 @@
 -- 008_add_mold_stage.sql
 INSERT INTO departments (id, name, parent_id, description)
-VALUES (11, '模具部', 2, '负责模具设计与采购')
+SELECT 11, '模具部', 2, '负责模具设计与采购'
+WHERE EXISTS (SELECT 1 FROM departments WHERE id = 2)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO users (username, password, name, department_id, role)
-VALUES ('muji1', '$2a$10$CaWMq26QL4loY8mrjY5ZLeFwu.iT5zf3YR2HlviEK1qMX9gTo2nlq', '模具管理', 11, 'mold')
+SELECT 'muji1', '$2a$10$CaWMq26QL4loY8mrjY5ZLeFwu.iT5zf3YR2HlviEK1qMX9gTo2nlq', '模具管理', 11, 'mold'
+WHERE EXISTS (SELECT 1 FROM departments WHERE id = 11)
 ON CONFLICT (username) DO NOTHING;
 
 UPDATE process_stages

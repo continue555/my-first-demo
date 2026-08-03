@@ -1,10 +1,12 @@
 -- 009_add_material_follow_up.sql
 INSERT INTO departments (id, name, parent_id, description)
-VALUES (12, '物料跟进部', 2, '负责跟进五大件采购到货情况')
+SELECT 12, '物料跟进部', 2, '负责跟进五大件采购到货情况'
+WHERE EXISTS (SELECT 1 FROM departments WHERE id = 2)
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO users (username, password, name, department_id, role)
-VALUES ('wuliao1', '$2a$10$CaWMq26QL4loY8mrjY5ZLeFwu.iT5zf3YR2HlviEK1qMX9gTo2nlq', '物料跟进', 12, 'material_follow')
+SELECT 'wuliao1', '$2a$10$CaWMq26QL4loY8mrjY5ZLeFwu.iT5zf3YR2HlviEK1qMX9gTo2nlq', '物料跟进', 12, 'material_follow'
+WHERE EXISTS (SELECT 1 FROM departments WHERE id = 12)
 ON CONFLICT (username) DO NOTHING;
 
 UPDATE process_stages
