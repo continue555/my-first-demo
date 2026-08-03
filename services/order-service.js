@@ -126,6 +126,8 @@ async function listOrders(query) {
   const page = Number.isFinite(rawPage) && rawPage > 0 ? rawPage : 1;
   const limit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 100) : 20;
   const offset = (page - 1) * limit;
+  if (startDate && !DATE_RE.test(startDate)) return { status: 400, body: { error: '日期格式不正确，应为 YYYY-MM-DD' } };
+  if (endDate && !DATE_RE.test(endDate)) return { status: 400, body: { error: '日期格式不正确，应为 YYYY-MM-DD' } };
 
   let where = 'WHERE 1=1';
   const params = [];
