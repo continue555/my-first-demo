@@ -58,6 +58,7 @@ conn.on('ready', () => {
       await uploadDir(path.join(root, 'public'), `${BASE}/public`);
       await uploadDir(path.join(root, 'frontend', 'src'), `${BASE}/frontend/src`);
       await uploadDir(path.join(root, 'migrations'), `${BASE}/migrations`);
+      await mkdir(`${BASE}/services`);
       const files = [
         ['frontend/index.html', `${BASE}/frontend/index.html`],
         ['frontend/package.json', `${BASE}/frontend/package.json`],
