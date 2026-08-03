@@ -82,6 +82,7 @@ conn.on('ready', () => {
         ['routes/notifications.js', `${BASE}/routes/notifications.js`],
         ['routes/orders-files.js', `${BASE}/routes/orders-files.js`],
         ['routes/orders.js', `${BASE}/routes/orders.js`],
+        ['services/order-service.js', `${BASE}/services/order-service.js`],
         ['middleware/async-handler.js', `${BASE}/middleware/async-handler.js`],
         ['middleware/auth.js', `${BASE}/middleware/auth.js`],
         ['middleware/csrf.js', `${BASE}/middleware/csrf.js`],

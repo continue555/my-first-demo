@@ -1,5 +1,6 @@
 require('express-async-errors');
 require('dotenv').config();
+const crypto = require('crypto');
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -30,6 +31,25 @@ const PORT = process.env.PORT || 3000;
 // 中间件
 app.use(cors());
 app.use(express.json());
+app.use((req, res, next) => {
+  req.id = req.headers['x-request-id'] || crypto.randomUUID();
+  res.setHeader('X-Request-Id', req.id);
+  const startedAt = Date.now();
+  res.on('finish', () => {
+    console.log(JSON.stringify({
+      ts: new Date().toISOString(),
+      level: 'info',
+      reqId: req.id,
+      method: req.method,
+      path: req.originalUrl,
+      status: res.statusCode,
+      ms: Date.now() - startedAt,
+      userId: req.user ? req.user.id : null,
+      username: req.user ? req.user.username : null
+    }));
+  });
+  next();
+});
 app.use('/api', csrfProtection);
 // 旧版 index.html 仍会引用上一次构建的 hash 文件名，这里把它们指向当前构建产物，
 // 避免浏览器缓存旧 HTML 后因资源缺失而被 SPA 兜底成 text/html 导致白屏。
@@ -84,7 +104,16 @@ app.get('*', (req, res) => {
 
 // 全局错误处理（放在所有路由之后，捕获未处理的异常）
 app.use((err, req, res, next) => {
-  console.error('[Error]', err.stack || err.message || err);
+  console.error(JSON.stringify({
+    ts: new Date().toISOString(),
+    level: 'error',
+    reqId: req.id,
+    method: req.method,
+    path: req.originalUrl,
+    userId: req.user ? req.user.id : null,
+    message: err.message || String(err),
+    stack: err.stack
+  }));
   res.status(err.status || 500).json({ error: err.message || '服务器内部错误' });
 });
 
