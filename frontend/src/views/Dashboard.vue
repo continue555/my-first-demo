@@ -132,7 +132,7 @@ onUnmounted(() => {
   display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 24px;
 }
 .stat-card {
-  background: #fff; border-radius: 14px; box-shadow: 0 2px 12px rgba(0,0,0,0.05);
+  background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.05);
   padding: 24px 20px; display: flex; align-items: center; gap: 16px;
   border: 1px solid #e5e7eb; transition: transform 0.2s, box-shadow 0.2s;
 }
@@ -147,8 +147,8 @@ onUnmounted(() => {
 .dashboard-layout { display: grid; grid-template-columns: 2fr 1fr; gap: 20px; }
 @media (max-width: 900px) { .stats-row { grid-template-columns: 1fr; } .dashboard-layout { grid-template-columns: 1fr; } }
 
-.dashboard-card { background: #fff; border-radius: 14px; box-shadow: 0 2px 12px rgba(0,0,0,0.05); border: 1px solid #e5e7eb; overflow: hidden; }
-.dashboard-card-header { padding: 16px 20px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; background: #fafbfc; }
+.dashboard-card { background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.05); border: 1px solid #e5e7eb; overflow: hidden; }
+.dashboard-card-header { padding: 14px 16px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; background: #fafbfc; }
 .dash-title { font-size: 15px; font-weight: 600; }
 .dash-link { font-size: 12px; color: #1a73e8; cursor: pointer; }
 .dash-link:hover { text-decoration: underline; }
@@ -159,7 +159,7 @@ onUnmounted(() => {
 .mini-stat.overdue .mini-num { color: #ef4444; }
 .mini-stat.wait .mini-num { color: #6b7280; }
 
-.dash-order-row { display: flex; align-items: center; padding: 14px 20px; border-bottom: 1px solid #e5e7eb; cursor: pointer; transition: background 0.15s; gap: 14px; }
+.dash-order-row { display: flex; align-items: center; padding: 12px 16px; border-bottom: 1px solid #e5e7eb; cursor: pointer; transition: background 0.15s; gap: 14px; }
 .dash-order-row:last-child { border-bottom: none; }
 .dash-order-row:hover { background: #f8fafc; }
 .dash-order-info { flex: 1; min-width: 0; }

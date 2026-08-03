@@ -37,8 +37,13 @@ onMounted(() => { load(); pollTimer = setInterval(load, 60000); });
 onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });
 </script>
 <style scoped>
-.notif-row { padding:14px 0; border-bottom:1px solid var(--border); display:flex; align-items:center; gap:12px; }
-.notif-row.read { opacity:0.6; }
+.notif-row {
+  padding:14px 16px; margin:8px 0; border-radius:10px; background:#fff;
+  border:1px solid var(--border); display:flex; align-items:center; gap:12px;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.notif-row:not(.read) { border-color:#c7d2fe; background:#f5f6ff; }
+.notif-row.read { opacity:0.55; }
 .notif-row.clickable { cursor:pointer; }
-.notif-row.clickable:hover { background:#f9fafb; }
+.notif-row.clickable:hover { border-color:#a5b4fc; box-shadow: var(--shadow); }
 </style>

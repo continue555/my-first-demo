@@ -107,7 +107,7 @@ async function doChangePwd() {
   background: linear-gradient(135deg, #1e3a5f 0%, #1a73e8 50%, #0d9488 100%);
 }
 .login-card {
-  background: #fff; padding: 40px; border-radius: 12px;
+  background: #fff; padding: 36px; border-radius: var(--radius-lg);
   box-shadow: 0 20px 60px rgba(0,0,0,0.3);
   width: 400px; max-width: 90vw;
 }
@@ -116,14 +116,15 @@ async function doChangePwd() {
 .form-group { margin-bottom: 20px; }
 .form-group label { display: block; margin-bottom: 6px; font-weight: 500; font-size: 14px; }
 .form-group input {
-  width: 100%; padding: 10px 14px; border: 1px solid #e5e7eb;
+  width: 100%; padding: 10px 14px; min-height: 40px; border: 1px solid #e5e7eb;
   border-radius: 8px; font-size: 14px; transition: border-color 0.2s;
 }
 .form-group input:focus { outline: none; border-color: #1a73e8; box-shadow: 0 0 0 3px rgba(26,115,232,0.1); }
+.form-group input:focus-visible { outline: 2px solid #1a73e8; outline-offset: 1px; }
 .btn {
   display: inline-flex; align-items: center; justify-content: center;
-  gap: 6px; padding: 10px 20px; border: none; border-radius: 8px;
-  font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s;
+  gap: 6px; padding: 10px 20px; min-height: 44px; border: none; border-radius: 8px;
+  font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s;
 }
 .btn-primary { background: #1a73e8; color: #fff; }
 .btn-primary:hover { background: #1557b0; }
