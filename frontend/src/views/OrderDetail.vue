@@ -631,14 +631,16 @@ onUnmounted(() => {
  box-shadow: 0 2px 12px rgba(0,0,0,0.1);
 }
 .purchase-group-header {
-  padding: 8px 0 4px 0;
+  margin: 12px 0 4px;
+  padding: 6px 14px;
   font-size: 12px;
-  font-weight: 600;
-  color: #f59e0b;
-  letter-spacing: 1px;
+  font-weight: 700;
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: 999px;
   text-align: center;
-  border-top: 1px dashed #e5e7eb;
-  margin-top: 8px;
+  letter-spacing: 0.04em;
 }
 .detail-state {
   padding: 64px 20px;
