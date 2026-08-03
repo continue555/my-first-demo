@@ -82,6 +82,9 @@ function validateOrderInput(body, create) {
     data.status = body.status;
   }
   if (has('notes')) {
+    if (body.notes !== null && body.notes !== undefined && typeof body.notes !== 'string') {
+      return { error: '备注格式不正确' };
+    }
     data.notes = body.notes === null || body.notes === undefined ? null : cleanText(body.notes, 2000);
   }
   return { data };
@@ -305,6 +308,9 @@ async function deleteOrder(user, id) {
 async function updateStage(user, id, stageKey, body) {
   const db = getDb();
   const { status, notes } = body;
+  if (notes !== undefined && notes !== null && typeof notes !== 'string') {
+    return { status: 400, body: { error: '备注格式不正确' } };
+  }
   if (!STAGE_STATUSES.includes(status)) {
     return { status: 400, body: { error: '不支持的流程状态' } };
   }

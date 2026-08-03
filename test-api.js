@@ -359,6 +359,20 @@ async function main() {
     token = oldToken;
     return r.status === 403 ? {} : { error: "expected 403, got " + r.status };
   });
+  await test("Non-string notes rejected", async () => {
+    const r = await req("POST", "/api/orders", { customer_name: "T", project_name: "T", planned_delivery_date: "2026-08-10", notes: { a: 1 } });
+    return r.status === 400 ? {} : { error: "expected 400, got " + r.status };
+  });
+  await test("Notification read respects visibility", async () => {
+    const list = await req("GET", "/api/notifications?limit=200");
+    const hidden = (list.body.notifications || []).find(n => n.recipient_dept_id && n.recipient_dept_id !== 4);
+    if (!hidden) return {};
+    const oldToken = token;
+    await loginUser("jishu1", "123456");
+    const r = await req("PUT", `/api/notifications/${hidden.id}/read`);
+    token = oldToken;
+    return r.status === 404 ? {} : { error: "expected 404, got " + r.status };
+  });
 
   const testOrderIds = new Set([createdOrderId, roleOrderId].filter(Boolean));
   if (process.env.SKIP_CLEANUP === '1') {

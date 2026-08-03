@@ -48,7 +48,8 @@ router.get('/', authMiddleware, async (req, res) => {
 // 标记已读（仅当前用户）
 router.put('/:id/read', authMiddleware, async (req, res) => {
   const db = getDb();
-  const notif = await db.prepare('SELECT id FROM notifications WHERE id = ?').get(parseInt(req.params.id));
+  const deptFilter = await buildDepartmentFilter(req.user, 'notifications');
+  const notif = await db.prepare(`SELECT n.id FROM notifications n WHERE n.id = ? ${deptFilter.sql}`).get(parseInt(req.params.id), ...deptFilter.params);
   if (!notif) return res.status(404).json({ error: '通知不存在' });
   await db.prepare(`
     INSERT INTO notification_reads (notification_id, user_id)
