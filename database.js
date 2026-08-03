@@ -75,6 +75,10 @@ async function seedData() {
   const hash = bcrypt.hashSync('123456', 10);
   const users = [[1,'admin',hash,'系统管理员',null,'admin'],[2,'zongjingli',hash,'总经理',null,'management'],[3,'xiaoshou1',hash,'张销售',1,'sales'],[4,'xiaoshou2',hash,'李销售',1,'sales'],[5,'shengchan1',hash,'刘生产主管',2,'production'],[6,'jishu1',hash,'王技术',4,'production'],[7,'caigou1',hash,'赵采购',5,'production'],[8,'cangku1',hash,'钱仓库',6,'production'],[9,'zhuangpei1',hash,'孙装配',7,'production'],[10,'tiaoshi1',hash,'周调试',8,'production'],[11,'caiwu1',hash,'吴财务',3,'finance'],[12,'fahuo1',hash,'发货员',9,'production'],[13,'shenpi1',hash,'审批员',10,'production'],[14,'mujv1',hash,'胡彩静',11,'mold'],[15,'wuliao1',hash,'物料跟进',12,'material_follow']];
   for (const u of users) await db.prepare('INSERT INTO users (id, username, password, name, department_id, role) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (username) DO NOTHING').run(...u);
+  await db.exec(`
+    SELECT setval(pg_get_serial_sequence('departments', 'id'), GREATEST((SELECT MAX(id) FROM departments), 1));
+    SELECT setval(pg_get_serial_sequence('users', 'id'), GREATEST((SELECT MAX(id) FROM users), 1));
+  `);
   console.log('[DB] 种子数据已初始化');
 }
 
