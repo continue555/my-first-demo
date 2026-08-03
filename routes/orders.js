@@ -9,7 +9,7 @@ router.get('/', authMiddleware, async (req, res) => {
   res.status(r.status).json(r.body);
 });
 
-router.get('/stats', authMiddleware, async (req, res) => {
+router.get('/stats', authMiddleware, requireRole('admin', 'management', 'sales', 'finance'), async (req, res) => {
   const r = await orderService.getStats();
   res.status(r.status).json(r.body);
 });

@@ -318,6 +318,48 @@ async function main() {
   await test("Audit filter by order", async () => { const r = await req("GET", `/api/audit?order_id=${createdOrderId}`); return r.body.logs ? {} : { error: "audit filter failed" }; });
   await test("Audit filter by order number", async () => { const r = await req("GET", `/api/audit?order_no=${encodeURIComponent(customNo)}`); return r.body.logs ? {} : { error: "audit order_no filter failed" }; });
 
+  await test("Invalid order list params are safe", async () => {
+    const r1 = await req("GET", "/api/orders?page=abc&limit=abc");
+    const r2 = await req("GET", "/api/orders?limit=-1");
+    const r3 = await req("GET", "/api/orders?limit=100000");
+    return r1.status === 200 && r2.status === 200 && r3.status === 200 && Array.isArray(r1.body.orders) ? {} : { error: "order list params not safe" };
+  });
+  await test("Order list invalid dates rejected", async () => {
+    const r1 = await req("GET", "/api/orders?startDate=abc");
+    const r2 = await req("GET", "/api/orders?endDate=abc");
+    return r1.status === 400 && r2.status === 400 ? {} : { error: "invalid dates not rejected" };
+  });
+  await test("Audit invalid order id rejected", async () => {
+    const r = await req("GET", "/api/audit?order_id=abc");
+    return r.status === 400 ? {} : { error: "expected 400, got " + r.status };
+  });
+  await test("Notification invalid limit safe", async () => {
+    const r = await req("GET", "/api/notifications?limit=abc");
+    return r.status === 200 && Array.isArray(r.body.notifications) ? {} : { error: "notification limit not safe" };
+  });
+  await test("Stage time respects role permission", async () => {
+    const oldToken = token;
+    await loginUser("jishu1", "123456");
+    const r = await req("PUT", `/api/orders/${createdOrderId}/stages/shipping/time`, { start_date: "2026-08-01T09:00", planned_end_date: "2026-08-02T09:00" });
+    token = oldToken;
+    return r.status === 403 ? {} : { error: "expected 403, got " + r.status };
+  });
+  await test("Missing notification read returns 404", async () => {
+    const r = await req("PUT", "/api/notifications/999999/read");
+    return r.status === 404 ? {} : { error: "expected 404, got " + r.status };
+  });
+  await test("Invalid user role rejected", async () => {
+    const r = await req("POST", "/api/auth/register", { username: "badrole_" + Date.now(), password: "123456", name: "Bad", role: "superadmin", department_id: 1 });
+    return r.status === 400 ? {} : { error: "expected 400, got " + r.status };
+  });
+  await test("Stats restricted by role", async () => {
+    const oldToken = token;
+    await loginUser("jishu1", "123456");
+    const r = await req("GET", "/api/orders/stats");
+    token = oldToken;
+    return r.status === 403 ? {} : { error: "expected 403, got " + r.status };
+  });
+
   const testOrderIds = new Set([createdOrderId, roleOrderId].filter(Boolean));
   if (process.env.SKIP_CLEANUP === '1') {
     console.log("[cleanup] skipped (SKIP_CLEANUP=1)");
