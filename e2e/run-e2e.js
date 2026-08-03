@@ -57,9 +57,9 @@ async function login(page, username, password) {
       await page.locator('.modal input[type=date]').fill('2026-08-30');
       await page.locator('.modal .modal-actions .btn-primary').click();
       await page.waitForSelector('.modal', { state: 'detached', timeout: 15000 }).catch(() => {});
-      await page.waitForSelector('.order-card, .table-wrapper', { timeout: 30000 });
-      const card = page.locator('.order-card', { hasText: orderNo });
-      if ((await card.count()) === 0) throw new Error('order card not found');
+      await page.waitForSelector('.table-wrapper', { timeout: 30000 });
+      const row = page.locator('tbody tr', { hasText: orderNo });
+      if ((await row.count()) === 0) throw new Error('order row not found');
     } catch (e) {
       const extra = await page.evaluate(() => ({ modal: !!document.querySelector('.modal'), body: (document.body.innerText || '').slice(0, 300) })).catch(() => ({}));
       throw new Error(e.message + ' | api=' + JSON.stringify(createResp) + ' | state=' + JSON.stringify(extra));
@@ -67,10 +67,10 @@ async function login(page, username, password) {
   });
 
   await check('open order detail and back', async () => {
-    await page.locator('.order-card', { hasText: orderNo }).locator('button').first().click();
+    await page.locator('tbody tr', { hasText: orderNo }).locator('button').first().click();
     await page.waitForSelector('.detail-grid', { timeout: 30000 });
     await page.goBack({ timeout: 30000 });
-    await page.waitForSelector('.order-card', { timeout: 30000 });
+    await page.waitForSelector('.table-wrapper', { timeout: 30000 });
   });
 
   await check('notifications page renders', async () => {
@@ -101,6 +101,14 @@ async function login(page, username, password) {
     await mp.waitForSelector('.mobile-more-sheet', { timeout: 10000 });
     const count = await mp.locator('.mobile-more-item').count();
     if (count !== 5) throw new Error('expected 5 more items, got ' + count);
+  });
+  await check('mobile order detail and back', async () => {
+    await mp.goto(BASE + '/orders', { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await mp.waitForSelector('.order-card', { timeout: 30000 });
+    await mp.locator('.order-card').first().locator('button').first().click();
+    await mp.waitForSelector('.detail-grid', { timeout: 30000 });
+    await mp.goBack({ timeout: 30000 });
+    await mp.waitForSelector('.order-card', { timeout: 30000 });
   });
   await mobile.close();
 
