@@ -49,7 +49,7 @@ router.get('/', authMiddleware, async (req, res) => {
 router.put('/:id/read', authMiddleware, async (req, res) => {
   const db = getDb();
   const deptFilter = await buildDepartmentFilter(req.user, 'notifications');
-  const notif = await db.prepare(`SELECT n.id FROM notifications n WHERE n.id = ? ${deptFilter.sql}`).get(parseInt(req.params.id), ...deptFilter.params);
+  const notif = await db.prepare(`SELECT id FROM notifications WHERE id = ? ${deptFilter.sql}`).get(parseInt(req.params.id), ...deptFilter.params);
   if (!notif) return res.status(404).json({ error: '通知不存在' });
   await db.prepare(`
     INSERT INTO notification_reads (notification_id, user_id)
