@@ -27,6 +27,61 @@ async function login(page, username, password) {
   await page.waitForFunction(() => !location.pathname.startsWith('/login'), null, { timeout: 45000 });
 }
 
+async function assertNoHorizontalOverflow(page) {
+  const overflow = await page.evaluate(() => {
+    const doc = document.documentElement;
+    return doc.scrollWidth - window.innerWidth;
+  });
+  if (overflow > 1) throw new Error('horizontal overflow ' + overflow + 'px');
+}
+
+async function assertMobileChrome(page) {
+  const info = await page.evaluate(() => {
+    const nav = document.querySelector('.mobile-bottom-nav');
+    const navRect = nav ? nav.getBoundingClientRect() : null;
+    const items = [...document.querySelectorAll('.mb-nav-item')].map(el => el.getBoundingClientRect().height);
+    const viewport = document.querySelector('meta[name=viewport]');
+    return {
+      navVisible: !!nav && navRect.height > 0,
+      navBottom: navRect ? navRect.bottom : 0,
+      innerHeight: window.innerHeight,
+      itemHeights: items,
+      viewportFitCover: viewport ? viewport.content.includes('viewport-fit=cover') : false,
+      safeAreaSupported: CSS.supports('padding-bottom: env(safe-area-inset-bottom)')
+    };
+  });
+  if (!info.navVisible) throw new Error('bottom nav not visible');
+  if (info.navBottom > info.innerHeight + 1) throw new Error('bottom nav extends past viewport');
+  if (info.itemHeights.some(h => h < 40)) throw new Error('nav item too short: ' + JSON.stringify(info.itemHeights));
+  if (!info.viewportFitCover) throw new Error('viewport-fit=cover missing');
+  if (!info.safeAreaSupported) throw new Error('safe-area env not supported');
+}
+
+async function runMobileFlow(page, label) {
+  await login(page, 'admin', '123456');
+  await page.waitForSelector('.mobile-bottom-nav', { timeout: 30000 });
+  await assertMobileChrome(page);
+
+  await page.goto(BASE + '/orders', { waitUntil: 'domcontentloaded', timeout: 45000 });
+  await page.waitForSelector('.order-card', { timeout: 30000 });
+  await assertNoHorizontalOverflow(page);
+
+  await page.locator('.order-card').first().locator('button').first().click();
+  await page.waitForSelector('.detail-grid', { timeout: 30000 });
+  await assertNoHorizontalOverflow(page);
+  await page.goBack({ timeout: 30000 });
+  await page.waitForSelector('.order-card', { timeout: 30000 });
+
+  await page.goto(BASE + '/notifications', { waitUntil: 'domcontentloaded', timeout: 45000 });
+  await page.waitForTimeout(800);
+  await assertNoHorizontalOverflow(page);
+
+  await page.locator('.mb-nav-item').nth(3).click();
+  await page.waitForSelector('.mobile-more-sheet', { timeout: 10000 });
+  const count = await page.locator('.mobile-more-item').count();
+  if (count !== 5) throw new Error(label + ': expected 5 more items, got ' + count);
+}
+
 (async () => {
   const browser = await chromium.launch();
 
@@ -87,30 +142,29 @@ async function login(page, username, password) {
   });
   await desktop.close();
 
-  const mobile = await browser.newContext({ ...devices['iPhone 13'] });
-  const mp = await mobile.newPage();
-  track(mp);
-  await check('mobile login and bottom nav', async () => {
-    await login(mp, 'admin', '123456');
-    await mp.waitForSelector('.mobile-bottom-nav', { timeout: 30000 });
-    await mp.goto(BASE + '/orders', { waitUntil: 'domcontentloaded', timeout: 45000 });
-    await mp.waitForSelector('.order-card', { timeout: 30000 });
+  const mobileMatrix = [
+    { name: 'iOS iPhone 13', context: { ...devices['iPhone 13'] } },
+    { name: 'iOS iPhone SE', context: { ...devices['iPhone SE (3rd gen)'] } },
+    { name: 'Android Pixel 7', context: { ...devices['Pixel 7'] } }
+  ];
+  for (const entry of mobileMatrix) {
+    const mobile = await browser.newContext(entry.context);
+    const mp = await mobile.newPage();
+    track(mp);
+    await check(entry.name + ' flow', () => runMobileFlow(mp, entry.name));
+    await mobile.close();
+  }
+
+  const wechat = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148 MicroMessenger/8.0.49(0x18003123) NetType/WIFI Language/zh_CN',
+    isMobile: true,
+    hasTouch: true
   });
-  await check('mobile more menu', async () => {
-    await mp.locator('.mb-nav-item').nth(3).click();
-    await mp.waitForSelector('.mobile-more-sheet', { timeout: 10000 });
-    const count = await mp.locator('.mobile-more-item').count();
-    if (count !== 5) throw new Error('expected 5 more items, got ' + count);
-  });
-  await check('mobile order detail and back', async () => {
-    await mp.goto(BASE + '/orders', { waitUntil: 'domcontentloaded', timeout: 45000 });
-    await mp.waitForSelector('.order-card', { timeout: 30000 });
-    await mp.locator('.order-card').first().locator('button').first().click();
-    await mp.waitForSelector('.detail-grid', { timeout: 30000 });
-    await mp.goBack({ timeout: 30000 });
-    await mp.waitForSelector('.order-card', { timeout: 30000 });
-  });
-  await mobile.close();
+  const wp = await wechat.newPage();
+  track(wp);
+  await check('WeChat browser flow', () => runMobileFlow(wp, 'WeChat'));
+  await wechat.close();
 
   const nonAdmin = await browser.newContext({ viewport: { width: 1280, height: 800 } });
   const np = await nonAdmin.newPage();

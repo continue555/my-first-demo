@@ -20,6 +20,7 @@
 
 ## 近期完成（2026-08-03）
 
+- 移动端兼容：viewport-fit=cover + safe-area 适配、输入框 16px 防 iOS 自动缩放、100dvh 视口适配；E2E 增加 iPhone 13/iPhone SE/Pixel 7/微信 UA 移动端矩阵
 - 架构：auth/附件/导出业务已拆 service（`auth-service`、`files-service`、`export-service`），routes 全部为薄路由
 - 依赖：后端 exceljs 依赖的 uuid 已通过 npm overrides 升级至 11.1.1，后端生产依赖审计 0 漏洞（无需破坏性降级 exceljs）
 - 移动端体验：底部导航、订单卡片、筛选保留、预览全屏
@@ -35,7 +36,7 @@
 
 - 历史一次性脚本（check_db/check_order/migrate_stages/migrate_to_pg）和 Docker 文件：用户明确保留，不删
 - `MONITOR_WEBHOOK` 未配置，配置后健康检查失败可推送告警
-- 真机（iOS/Android/微信）兼容性未做长期验证
+- 真机（iOS/Android/微信）以 CI 模拟矩阵覆盖；如需实物机型回归，提供机型清单后补充
 - 备份“恢复演练”已通过一次，建议每周由定时任务持续验证
 
 ## 架构速览

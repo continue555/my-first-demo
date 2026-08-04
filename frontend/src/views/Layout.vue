@@ -211,7 +211,7 @@ onUnmounted(() => {
 </script>
 
 <style scoped>
-.app-layout { display: flex; min-height: 100vh; }
+.app-layout { display: flex; min-height: 100vh; min-height: 100dvh; }
 .sidebar {
   position: fixed; left: 0; top: 0; bottom: 0;
   width: 240px; background: #1e3a5f; color: #fff;
@@ -246,7 +246,7 @@ onUnmounted(() => {
 .sidebar-footer .logout-btn { color: rgba(255,255,255,0.5); cursor: pointer; font-size: 12px; }
 .sidebar-footer .logout-btn:hover { color: #fff; }
 .sidebar-footer .logout-btn svg { display: none; }
-.main-content { margin-left: 240px; padding: 24px; min-height: 100vh; flex: 1; }
+.main-content { margin-left: 240px; padding: 24px; min-height: 100vh; min-height: 100dvh; flex: 1; }
 .mobile-topbar,
 .mobile-bottom-nav,
 .mobile-more-overlay {

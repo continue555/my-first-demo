@@ -104,6 +104,7 @@ async function doChangePwd() {
 .login-page {
   display: flex; align-items: center; justify-content: center;
   min-height: 100vh;
+  min-height: 100dvh;
   background: linear-gradient(135deg, #1e3a5f 0%, #1a73e8 50%, #0d9488 100%);
 }
 .login-card {

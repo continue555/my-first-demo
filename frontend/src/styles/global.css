@@ -39,7 +39,12 @@ body {
   font-size: 14px;
   line-height: 1.55;
   min-height: 100vh;
+  min-height: 100dvh;
   -webkit-font-smoothing: antialiased;
+}
+
+a, button, input, select, textarea, label {
+  -webkit-tap-highlight-color: transparent;
 }
 
 .form-group { margin-bottom: 20px; }
@@ -243,4 +248,6 @@ tr:hover td { background: #f8fafc; }
   .form-group input, .form-group select, .form-group textarea { min-height: 42px; }
   .pagination { flex-wrap: wrap; }
   .detail-item .value { overflow-wrap: break-word; }
+  input, select, textarea { font-size: 16px !important; }
+  a, button { touch-action: manipulation; }
 }
