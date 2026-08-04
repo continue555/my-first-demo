@@ -52,9 +52,9 @@
         <div v-else-if="files.length === 0" style="text-align:center;padding:12px 0;color:var(--text-secondary);font-size:13px;">暂无附件</div>
         <div v-else class="file-list">
           <div v-for="f in files" :key="f.id" class="file-item">
-            <div v-if="isImage(f.mime_type)" class="file-thumb" @click="previewImage(f)">
+            <button v-if="isImage(f.mime_type)" type="button" class="file-thumb" :aria-label="'预览附件 ' + f.original_name" @click="previewImage(f)">
               <img v-if="f.previewUrl" :src="f.previewUrl" :alt="f.original_name" loading="lazy">
-            </div>
+            </button>
             <div v-else class="file-icon">{{ fileIcon(f.mime_type) }}</div>
             <div class="file-info">
               <div class="file-name" :title="f.original_name">{{ f.original_name }}</div>
@@ -92,7 +92,7 @@
               <template v-if="auth.canOperateStage(s)">
                 <button v-if="s.status === 'pending'" class="btn btn-success btn-sm" @click="updateStage(s, 'in_progress')">开始</button>
                 <button v-if="s.status === 'in_progress'" class="btn btn-primary btn-sm" @click="updateStage(s, 'completed')">完成</button>
-                <button v-if="!s.start_date || !s.planned_end_date || auth.isAdmin || auth.isManagement" class="btn btn-outline btn-sm" @click="showTimeModal(s)">⏱</button>
+                <button v-if="!s.start_date || !s.planned_end_date || auth.isAdmin || auth.isManagement" class="btn btn-outline btn-sm" aria-label="设置时间" @click="showTimeModal(s)">⏱</button>
               </template>
               <span v-else-if="!auth.isUserDept(s.department_id)" style="font-size:11px;color:var(--text-secondary)">无权限</span>
             </div>
@@ -129,7 +129,7 @@
                   <template v-if="auth.canOperateStage(ps)">
                     <button v-if="ps.status === 'pending'" class="btn btn-success btn-sm" @click="updateStage(ps, 'in_progress')">开始</button>
                     <button v-if="ps.status === 'in_progress'" class="btn btn-primary btn-sm" @click="updateStage(ps, 'completed')">完成</button>
-                    <button v-if="!ps.start_date || !ps.planned_end_date || auth.isAdmin || auth.isManagement" class="btn btn-outline btn-sm" @click="showTimeModal(ps)">⏱</button>
+                    <button v-if="!ps.start_date || !ps.planned_end_date || auth.isAdmin || auth.isManagement" class="btn btn-outline btn-sm" aria-label="设置时间" @click="showTimeModal(ps)">⏱</button>
                   </template>
                   <span v-else-if="!auth.isUserDept(ps.department_id)" style="font-size:11px;color:var(--text-secondary)">无权限</span>
                 </div>
@@ -587,6 +587,8 @@ onUnmounted(() => {
   justify-content: center;
   border: 1px solid var(--border, #e0e0e0);
   transition: transform 0.2s, box-shadow 0.2s;
+  appearance: none;
+  font-family: inherit;
 }
 .file-thumb:hover {
   transform: scale(1.05);

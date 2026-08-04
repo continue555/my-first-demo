@@ -58,14 +58,14 @@
         <div class="user-info">
           {{ auth.user?.name }} ({{ roleLabel }})
         </div>
-        <div class="logout-btn" @click="showChangePassword" title="修改密码">
+        <button type="button" class="logout-btn" @click="showChangePassword" title="修改密码">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
           <span class="footer-text">修改密码</span>
-        </div>
-        <div class="logout-btn" @click="doLogout" title="退出登录">
+        </button>
+        <button type="button" class="logout-btn" @click="doLogout" title="退出登录">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
           <span class="footer-text">退出登录</span>
-        </div>
+        </button>
       </div>
     </aside>
 
@@ -101,35 +101,35 @@
         <span>通知</span>
         <span v-if="auth.unreadCount > 0" class="mb-badge">{{ auth.unreadCount }}</span>
       </router-link>
-      <div class="mb-nav-item" :class="{ active: showMore }" @click="showMore = true">
+      <button type="button" class="mb-nav-item" :class="{ active: showMore }" @click="showMore = true">
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
         <span>更多</span>
-      </div>
+      </button>
     </nav>
 
     <div v-if="showMore" class="mobile-more-overlay" @click.self="showMore = false">
       <div class="mobile-more-sheet">
         <div class="mobile-more-title">更多功能</div>
-        <div v-if="auth.isAdmin || auth.isManagement" class="mobile-more-item" @click="goMore('/export')">
+        <button v-if="auth.isAdmin || auth.isManagement" type="button" class="mobile-more-item" @click="goMore('/export')">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
           <span>数据导出</span>
-        </div>
-        <div v-if="auth.isAdmin" class="mobile-more-item" @click="goMore('/users')">
+        </button>
+        <button v-if="auth.isAdmin" type="button" class="mobile-more-item" @click="goMore('/users')">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           <span>用户管理</span>
-        </div>
-        <div v-if="auth.isAdmin" class="mobile-more-item" @click="goMore('/audit')">
+        </button>
+        <button v-if="auth.isAdmin" type="button" class="mobile-more-item" @click="goMore('/audit')">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
           <span>操作日志</span>
-        </div>
-        <div class="mobile-more-item" @click="showChangePassword">
+        </button>
+        <button type="button" class="mobile-more-item" @click="showChangePassword">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
           <span>修改密码</span>
-        </div>
-        <div class="mobile-more-item danger" @click="doLogout">
+        </button>
+        <button type="button" class="mobile-more-item danger" @click="doLogout">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
           <span>退出登录</span>
-        </div>
+        </button>
       </div>
     </div>
 
@@ -243,7 +243,18 @@ onUnmounted(() => {
   font-size: 13px; color: rgba(255,255,255,0.6);
 }
 .sidebar-footer .user-info { margin-bottom: 8px; }
-.sidebar-footer .logout-btn { color: rgba(255,255,255,0.5); cursor: pointer; font-size: 12px; }
+.sidebar-footer .logout-btn {
+  color: rgba(255,255,255,0.5);
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  display: block;
+  width: 100%;
+  text-align: left;
+}
 .sidebar-footer .logout-btn:hover { color: #fff; }
 .sidebar-footer .logout-btn svg { display: none; }
 .main-content { margin-left: 240px; padding: 24px; min-height: 100vh; min-height: 100dvh; flex: 1; }
@@ -291,6 +302,10 @@ onUnmounted(() => {
     text-decoration: none;
     cursor: pointer;
     position: relative;
+    background: none;
+    border: none;
+    padding: 0;
+    font-family: inherit;
   }
   .mb-nav-item.active { color: var(--primary); }
   .mb-nav-item svg { width: 21px; height: 21px; }
@@ -335,6 +350,12 @@ onUnmounted(() => {
     padding: 14px 16px;
     font-size: 15px;
     cursor: pointer;
+    background: none;
+    border: none;
+    width: 100%;
+    text-align: left;
+    font-family: inherit;
+    color: var(--text);
   }
   .mobile-more-item:active { background: var(--bg); }
   .mobile-more-item.danger { color: #dc2626; }
