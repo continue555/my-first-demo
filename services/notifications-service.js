@@ -73,7 +73,7 @@ async function checkOverdue() {
     SELECT ps.*, o.order_no
     FROM process_stages ps
     JOIN orders o ON ps.order_id = o.id
-    WHERE ps.status NOT IN ('completed', 'cancelled')
+    WHERE ps.status <> 'completed'
       AND ps.planned_end_date IS NOT NULL
       AND (
         (ps.planned_end_date LIKE '%T%' AND ps.planned_end_date < ?)

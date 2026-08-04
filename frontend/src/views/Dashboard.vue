@@ -182,7 +182,6 @@ onUnmounted(() => {
 .status-in_progress { background: #fef3c7; color: #d97706; }
 .status-completed { background: #d1fae5; color: #059669; }
 .status-delayed { background: #fee2e2; color: #dc2626; }
-.status-cancelled { background: #f3f4f6; color: #9ca3af; text-decoration: line-through; }
 
 .dash-refresh-indicator { font-size: 11px; color: #6b7280; opacity: 0; transition: opacity 0.3s; margin-left: 8px; }
 .dash-refresh-indicator.show { opacity: 1; }

@@ -188,7 +188,7 @@ async function getStats() {
     overdue: Number((await db.prepare(`
       SELECT COUNT(*) as cnt FROM orders
       WHERE (
-        status NOT IN ('completed', 'cancelled')
+        status <> 'completed'
         AND planned_delivery_date IS NOT NULL
         AND planned_delivery_date::date < (NOW() AT TIME ZONE 'Asia/Shanghai')::date
       ) OR (

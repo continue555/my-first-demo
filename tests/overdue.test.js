@@ -30,9 +30,6 @@ test('completed late is overdue', () => {
   assert.equal(r.cssClass, 'overdue-red');
 });
 
-test('cancelled order is never overdue', () => {
-  assert.equal(getOverdueInfo({ status: 'cancelled', planned_end_date: '2026-07-01' }), null);
-});
 
 test('missing planned date returns null', () => {
   assert.equal(getOverdueInfo({ status: 'pending' }), null);
