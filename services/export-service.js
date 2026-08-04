@@ -1,7 +1,8 @@
 const path = require('path');
 const fs = require('fs');
 const ExcelJS = require('exceljs');
-const { getDb } = require('../database');
+const database = require('../database');
+function getDb() { return database.getDb(); }
 const { createDownloadTicket } = require('../lib/download-ticket');
 const STATUS_LABELS = require('../shared/status-labels.json');
 const { getOverdueInfo } = require('../lib/overdue');
@@ -82,7 +83,7 @@ function loadExportJobs() {
   }
 }
 
-setInterval(() => {
+const cleanupTimer = setInterval(() => {
   const now = Date.now();
   for (const [id, job] of exportJobs) {
     if (now - job.createdAt > 60 * 60 * 1000) {
@@ -94,6 +95,7 @@ setInterval(() => {
   }
   saveExportJobs();
 }, 60 * 60 * 1000);
+cleanupTimer.unref();
 
 // === 辅助函数 ===
 
@@ -624,5 +626,6 @@ module.exports = {
   runSingleOrderExport,
   createExportJob,
   getExportJob,
-  getExportJobDownload
+  getExportJobDownload,
+  buildSingleOrderWorkbook
 };

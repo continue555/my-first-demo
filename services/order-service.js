@@ -1,6 +1,8 @@
 const fs = require('fs');
 const path = require('path');
-const { getDb, logAudit } = require('../database');
+const database = require('../database');
+function getDb() { return database.getDb(); }
+function logAudit(...args) { return database.logAudit(...args); }
 const STAGE_DEFINITIONS = require('../shared/stage-defs.json');
 const sanitize = require('../lib/sanitize');
 const { canOperateStage } = require('../lib/stage-permissions');
@@ -316,12 +318,8 @@ async function deleteOrder(user, id) {
 async function updateStage(user, id, stageKey, body) {
   const db = getDb();
   const { status, notes } = body;
-  if (notes !== undefined && notes !== null && typeof notes !== 'string') {
-    return { status: 400, body: { error: '备注格式不正确' } };
-  }
-  if (!STAGE_STATUSES.includes(status)) {
-    return { status: 400, body: { error: '不支持的流程状态' } };
-  }
+  const stageCheck = validateStageUpdate(body);
+  if (stageCheck) return { status: 400, body: { error: stageCheck.error } };
 
   const order = await db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
   if (!order) {
@@ -449,8 +447,20 @@ async function updateStageTime(user, id, stageKey, body) {
 
   return { status: 200, body: { message: '时间更新成功' } };
 }
+
+function validateStageUpdate(body) {
+  const { status, notes } = body || {};
+  if (notes !== undefined && notes !== null && typeof notes !== 'string') {
+    return { error: '备注格式不正确' };
+  }
+  if (!STAGE_STATUSES.includes(status)) {
+    return { error: '不支持的流程状态' };
+  }
+  return null;
+}
+
 module.exports = {
   listOrders, getStats, createOrder, getOrder, updateOrder, deleteOrder, updateStage, updateStageTime,
-  cleanText, validateDate, validateStageDateTime, validateOrderInput, generateOrderNo,
+  validateStageUpdate, cleanText, validateDate, validateStageDateTime, validateOrderInput, generateOrderNo,
   STAGE_DEFINITIONS
 };

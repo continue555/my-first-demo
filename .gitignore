@@ -5,7 +5,8 @@ backups/
 .npm-cache/
 *.log
 logs/
-!.env.exampleuploads/
+!.env.example
+uploads/
 *.pem
 screenshot.png
 test_api.js

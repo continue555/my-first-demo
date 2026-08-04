@@ -128,6 +128,65 @@ async function runMobileFlow(page, label) {
     await page.waitForSelector('.table-wrapper', { timeout: 30000 });
   });
 
+  await check('upload attachment and preview via UI', async () => {
+    await page.goto(BASE + '/orders', { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.locator('tbody tr', { hasText: orderNo }).locator('button').first().click();
+    await page.waitForSelector('.detail-grid', { timeout: 30000 });
+    await page.locator('.card-title input[type=file]').setInputFiles({
+      name: 'e2e-upload.txt',
+      mimeType: 'text/plain',
+      buffer: Buffer.from('e2e attachment content')
+    });
+    await page.waitForSelector('.file-item', { timeout: 15000 });
+    const item = page.locator('.file-item', { hasText: 'e2e-upload.txt' });
+    if ((await item.count()) === 0) throw new Error('uploaded file not listed');
+    await item.locator('button', { hasText: '预览' }).click();
+    await page.waitForSelector('.doc-preview-modal', { timeout: 15000 });
+    const previewText = await page.locator('.doc-preview-body').innerText();
+    if (!previewText.includes('e2e attachment content')) throw new Error('preview content missing');
+    await page.locator('.doc-preview-modal .image-preview-header button').click();
+    await page.waitForSelector('.doc-preview-modal', { state: 'detached', timeout: 10000 }).catch(() => {});
+  });
+
+  await check('create and delete user via UI', async () => {
+    const username = 'e2euser_' + Date.now();
+    await page.goto(BASE + '/users', { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.waitForSelector('.page-header .btn-primary', { timeout: 30000 });
+    await page.locator('.page-header .btn-primary').click();
+    await page.waitForSelector('.modal', { timeout: 10000 });
+    const modal = page.locator('.modal');
+    await modal.locator('input[type=text]').nth(0).fill(username);
+    await modal.locator('input[type=password]').fill('123456');
+    await modal.locator('input[type=text]').nth(1).fill('E2E 用户');
+    await modal.locator('select').nth(0).selectOption('sales');
+    await modal.locator('select').nth(1).selectOption('1');
+    await modal.locator('.modal-actions .btn-primary').click();
+    await page.waitForSelector('tbody tr', { hasText: username }, { timeout: 15000 });
+    const row = page.locator('tbody tr', { hasText: username });
+    if ((await row.count()) === 0) throw new Error('user row not found');
+    await row.locator('button', { hasText: '删除' }).click();
+    await page.waitForSelector('.modal-overlay', { timeout: 10000 });
+    await page.locator('.modal-overlay .modal-actions .btn-danger').click();
+    await page.waitForFunction(
+      u => ![...document.querySelectorAll('tbody tr')].some(r => r.textContent.includes(u)),
+      username,
+      { timeout: 15000 }
+    );
+  });
+
+  await check('batch export via UI', async () => {
+    await page.goto(BASE + '/orders', { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.waitForSelector('tbody input[type=checkbox]', { timeout: 30000 });
+    const boxes = page.locator('tbody input[type=checkbox]');
+    await boxes.nth(0).check();
+    if ((await boxes.count()) > 1) await boxes.nth(1).check();
+    await page.waitForSelector('.batch-bar', { timeout: 10000 });
+    await page.locator('.batch-bar button', { hasText: '批量导出' }).click();
+    await page.waitForSelector('.toast-success', { timeout: 45000 });
+    const toastText = await page.locator('.toast-success').last().innerText();
+    if (!toastText.includes('导出成功')) throw new Error('batch export toast missing: ' + toastText);
+  });
+
   await check('notifications page renders', async () => {
     await page.goto(BASE + '/notifications', { waitUntil: 'domcontentloaded', timeout: 45000 });
     await page.waitForTimeout(1000);

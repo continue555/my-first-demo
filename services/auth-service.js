@@ -1,75 +1,12 @@
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
-const { getDb, logAudit } = require('../database');
+const database = require('../database');
+function getDb() { return database.getDb(); }
+function logAudit(...args) { return database.logAudit(...args); }
 const { generateToken, getChildDeptIds, bumpTokenVersion } = require('../middleware/auth');
 const sanitize = require('../lib/sanitize');
+const { checkRateLimit, recordFailedAttempt, clearRateLimit } = require('../lib/login-rate-limit');
 const { parse, registerSchema, changePasswordSchema, resetPasswordSchema, updateUserSchema } = require('../lib/validators');
-
-// ===== 登录限流 =====
-const MAX_ATTEMPTS = 5;
-const LOCK_TIME = 15 * 60 * 1000; // 15分钟
-
-function getRateLimitKey(username, ip) {
-  return `${username}_${ip}`;
-}
-
-async function checkRateLimit(username, ip) {
-  const db = getDb();
-  const key = getRateLimitKey(username, ip);
-  const record = await db.prepare('SELECT * FROM login_attempts WHERE attempt_key = ?').get(key);
-  const now = Date.now();
-
-  if (!record) return null;
-
-  if (record.locked_until && now < Number(record.locked_until)) {
-    const remaining = Math.ceil((Number(record.locked_until) - now) / 1000 / 60);
-    return `账号已锁定，请${remaining}分钟后重试`;
-  }
-
-  if (record.locked_until && now >= Number(record.locked_until)) {
-    await db.prepare('DELETE FROM login_attempts WHERE attempt_key = ?').run(key);
-    return null;
-  }
-
-  return null;
-}
-
-async function recordFailedAttempt(username, ip) {
-  const db = getDb();
-  const key = getRateLimitKey(username, ip);
-  const now = Date.now();
-  const record = await db.prepare('SELECT * FROM login_attempts WHERE attempt_key = ?').get(key);
-  const count = (record && now - Number(record.first_time) < 24 * 60 * 60 * 1000) ? Number(record.count) + 1 : 1;
-  const firstTime = record && now - Number(record.first_time) < 24 * 60 * 60 * 1000 ? Number(record.first_time) : now;
-  let lockedUntil = null;
-
-  if (count >= MAX_ATTEMPTS) {
-    lockedUntil = now + LOCK_TIME;
-  }
-
-  await db.prepare(`
-    INSERT INTO login_attempts (attempt_key, count, first_time, locked_until)
-    VALUES (?, ?, ?, ?)
-    ON CONFLICT (attempt_key) DO UPDATE SET
-      count = EXCLUDED.count,
-      first_time = EXCLUDED.first_time,
-      locked_until = EXCLUDED.locked_until
-  `).run(key, count, firstTime, lockedUntil);
-}
-
-async function clearRateLimit(username, ip) {
-  const db = getDb();
-  await db.prepare('DELETE FROM login_attempts WHERE attempt_key = ?').run(getRateLimitKey(username, ip));
-}
-
-setInterval(async () => {
-  try {
-    const db = getDb();
-    const now = Date.now();
-    await db.prepare('DELETE FROM login_attempts WHERE first_time < ? OR (locked_until IS NOT NULL AND locked_until < ?)')
-      .run(now - 24 * 60 * 60 * 1000, now - 60 * 60 * 1000);
-  } catch {}
-}, 60 * 60 * 1000);
 
 async function login({ username, password, ip, secure }) {
   if (!username || !password) return { status: 400, body: { error: '请输入用户名和密码' } };
