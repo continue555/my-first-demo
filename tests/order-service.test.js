@@ -119,3 +119,137 @@ test('createOrder returns 400 on unique violation', async () => {
     database.getDb = original;
   }
 });
+
+function notificationFakeDb({ stage, depsStatuses, allStatuses }) {
+  const inserts = [];
+  return {
+    inserts,
+    prepare(sql) {
+      return {
+        async get(...params) {
+          if (sql.includes('FROM orders') && !sql.includes('status')) return orderRow;
+          if (sql.includes('FROM process_stages') && sql.includes('stage_key = ?')) return stage;
+          return null;
+        },
+        async all(...params) {
+          if (sql.includes('SELECT status FROM process_stages') && sql.includes('stage_key IN')) return depsStatuses;
+          if (sql.includes('SELECT status FROM process_stages')) return allStatuses;
+          return [];
+        },
+        async run(...params) {
+          if (sql.includes('INSERT INTO notifications')) {
+            inserts.push(params);
+            return { changes: 1, lastInsertRowid: 99 };
+          }
+          return { changes: 1, lastInsertRowid: 1 };
+        }
+      };
+    }
+  };
+}
+
+function withNoopAudit(fn) {
+  const original = database.logAudit;
+  database.logAudit = async () => {};
+  return async () => {
+    try {
+      await fn();
+    } finally {
+      database.logAudit = original;
+    }
+  };
+}
+
+const notAllDone = [
+  { status: 'completed' }, { status: 'completed' }, { status: 'completed' },
+  { status: 'completed' }, { status: 'completed' }, { status: 'completed' },
+  { status: 'completed' }, { status: 'completed' }, { status: 'completed' },
+  { status: 'completed' }, { status: 'completed' }, { status: 'completed' },
+  { status: 'completed' }, { status: 'completed' }, { status: 'completed' },
+  { status: 'completed' }, { status: 'completed' }, { status: 'completed' },
+  { status: 'completed' }, { status: 'completed' }, { status: 'completed' },
+  { status: 'pending' }
+];
+
+test('no notification until all multi-dependencies completed', withNoopAudit(async () => {
+  const fake = notificationFakeDb({
+    stage: { id: 10, stage_key: 'frame_follow_up', stage_name: '机架采购跟进', status: 'in_progress', department_id: 12 },
+    depsStatuses: [
+      { status: 'completed' }, { status: 'completed' }, { status: 'completed' },
+      { status: 'completed' }, { status: 'pending' }
+    ],
+    allStatuses: notAllDone
+  });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStage(admin, 1, 'frame_follow_up', { status: 'completed' });
+    assert.equal(r.status, 200);
+    assert.equal(fake.inserts.length, 0);
+  } finally {
+    database.getDb = original;
+  }
+}));
+
+test('notification fires when all dependencies completed', withNoopAudit(async () => {
+  const fake = notificationFakeDb({
+    stage: { id: 10, stage_key: 'frame_follow_up', stage_name: '机架采购跟进', status: 'in_progress', department_id: 12 },
+    depsStatuses: [
+      { status: 'completed' }, { status: 'completed' }, { status: 'completed' },
+      { status: 'completed' }, { status: 'completed' }
+    ],
+    allStatuses: notAllDone
+  });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStage(admin, 1, 'frame_follow_up', { status: 'completed' });
+    assert.equal(r.status, 200);
+    assert.equal(fake.inserts.length, 1);
+    assert.equal(fake.inserts[0][2], 6);
+    assert.ok(fake.inserts[0][1].includes('物料进仓'));
+  } finally {
+    database.getDb = original;
+  }
+}));
+
+test('parallel next stages aggregated per department', withNoopAudit(async () => {
+  const fake = notificationFakeDb({
+    stage: { id: 8, stage_key: 'purchase_plan', stage_name: '采购计划制定', status: 'in_progress', department_id: 5 },
+    depsStatuses: [],
+    allStatuses: notAllDone
+  });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStage(admin, 1, 'purchase_plan', { status: 'completed' });
+    assert.equal(r.status, 200);
+    assert.equal(fake.inserts.length, 2);
+    const dept5 = fake.inserts.find(i => i[2] === 5);
+    const dept11 = fake.inserts.find(i => i[2] === 11);
+    assert.ok(dept5 && dept5[1].includes('机架采购') && dept5[1].includes('外罩采购'));
+    assert.ok(dept11 && dept11[1].includes('模具设计与采购'));
+  } finally {
+    database.getDb = original;
+  }
+}));
+
+test('null-department stage notifies management role', withNoopAudit(async () => {
+  const fake = notificationFakeDb({
+    stage: { id: 7, stage_key: 'manufacturing_approval', stage_name: '制造审批', status: 'in_progress', department_id: 10 },
+    depsStatuses: [],
+    allStatuses: notAllDone
+  });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStage(admin, 1, 'manufacturing_approval', { status: 'completed' });
+    assert.equal(r.status, 200);
+    assert.equal(fake.inserts.length, 1);
+    assert.equal(fake.inserts[0][2], 'management');
+    assert.equal(fake.inserts[0].length, 4);
+    assert.ok(fake.inserts[0][1].includes('总经理签字'));
+  } finally {
+    database.getDb = original;
+  }
+}));

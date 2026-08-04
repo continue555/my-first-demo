@@ -1,5 +1,5 @@
 const { getDb } = require('../database');
-const { buildDepartmentFilter } = require('../lib/dept-filter');
+const { buildNotificationFilter } = require('../lib/dept-filter');
 
 async function listNotifications(user, query) {
   const db = getDb();
@@ -14,7 +14,7 @@ async function listNotifications(user, query) {
     where += ' AND NOT EXISTS (SELECT 1 FROM notification_reads nr WHERE nr.notification_id = n.id AND nr.user_id = ?)';
     params.push(userId);
   }
-  const deptFilter = await buildDepartmentFilter(user, 'n');
+  const deptFilter = await buildNotificationFilter(user, 'n');
   where += deptFilter.sql;
   params.push(...deptFilter.params);
 
@@ -30,7 +30,7 @@ async function listNotifications(user, query) {
 
   let unreadWhere = 'WHERE NOT EXISTS (SELECT 1 FROM notification_reads nr WHERE nr.notification_id = n.id AND nr.user_id = ?)';
   const unreadParams = [userId];
-  const unreadDeptFilter = await buildDepartmentFilter(user, 'n');
+  const unreadDeptFilter = await buildNotificationFilter(user, 'n');
   unreadWhere += unreadDeptFilter.sql;
   unreadParams.push(...unreadDeptFilter.params);
 
@@ -40,7 +40,7 @@ async function listNotifications(user, query) {
 
 async function markRead(user, id) {
   const db = getDb();
-  const deptFilter = await buildDepartmentFilter(user, 'notifications');
+  const deptFilter = await buildNotificationFilter(user, 'notifications');
   const notif = await db.prepare(`SELECT id FROM notifications WHERE id = ? ${deptFilter.sql}`).get(parseInt(id), ...deptFilter.params);
   if (!notif) return { status: 404, body: { error: '通知不存在' } };
   await db.prepare(`
@@ -54,7 +54,7 @@ async function markRead(user, id) {
 async function markAllRead(user) {
   const db = getDb();
   const userId = user.id;
-  const deptFilter = await buildDepartmentFilter(user, 'notifications');
+  const deptFilter = await buildNotificationFilter(user, 'notifications');
   await db.prepare(`
     INSERT INTO notification_reads (notification_id, user_id)
     SELECT id, ? FROM notifications

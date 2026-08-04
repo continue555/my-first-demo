@@ -297,6 +297,23 @@ async function main() {
     if (!jishuTarget || jishuTarget.is_read !== 0) return { error: "read not isolated" };
     return {};
   });
+  await test("Management role notification visible", async () => {
+    const oldToken = token;
+    const login = await loginUser("zongjingli", "123456");
+    if (!login.body.user) { token = oldToken; return { error: "login failed" }; }
+    const list = await req("GET", "/api/notifications?limit=200");
+    token = oldToken;
+    const n = (list.body.notifications || []).find(x => x.order_id === createdOrderId && x.recipient_role === "management");
+    return n && n.message.includes("总经理签字") ? {} : { error: "management notification missing" };
+  });
+  await test("Non-management cannot see role notification", async () => {
+    const oldToken = token;
+    const jishu = await loginUser("jishu1", "123456");
+    const list = await req("GET", "/api/notifications?limit=200");
+    token = oldToken;
+    const n = (list.body.notifications || []).find(x => x.order_id === createdOrderId && x.recipient_role === "management");
+    return n ? { error: "role notification visible to non-management" } : {};
+  });
   await test("Preview ticket endpoint", async () => { const r = await req("GET", "/api/files/999999/ticket"); return r.status === 404 ? {} : { error: "expected 404, got " + r.status }; });
   await test("Export contains order and stages", async () => {
     const res = await rawFetch("GET", `/api/export/order/${createdOrderId}`);

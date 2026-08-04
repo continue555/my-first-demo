@@ -377,32 +377,9 @@ async function updateStage(user, id, stageKey, body) {
       await db.prepare("UPDATE orders SET status = 'completed', actual_delivery_date = ?, updated_at = datetime('now', '+8 hours') WHERE id = ?").run(now, id);
     }
 
-    // 通知下一节点负责部门
+    // 通知下一节点（依赖全部满足后才通知，并按接收方聚合）
     const stageDef = STAGE_DEFINITIONS.find(s => s.key === stageKey);
-    const nextStages = STAGE_DEFINITIONS.filter(s => {
-      if (!s.dependsOn) return false;
-      return String(s.dependsOn).split(',').map(k => k.trim()).includes(stageKey);
-    });
-    for (const nextStage of nextStages) {
-      if (!nextStage.deptId) continue;
-      try {
-        await db.prepare(`
-          INSERT INTO notifications (order_id, message, recipient_dept_id, source_key)
-          VALUES (?, ?, ?, ?)
-          ON CONFLICT (source_key) WHERE source_key IS NOT NULL DO NOTHING
-        `).run(id, `订单 ${order.order_no} 的"${stageDef.name}"已完成，请开始"${nextStage.name}"`, nextStage.deptId, `stage_completed:${id}:${stageKey}:${nextStage.key}`);
-      } catch (e) {
-        console.error(JSON.stringify({
-          ts: new Date().toISOString(),
-          level: 'error',
-          message: '阶段完成通知写入失败',
-          orderId: id,
-          stageKey,
-          nextStage: nextStage.key,
-          error: e.message
-        }));
-      }
-    }
+    await notifyReadyNextStages(db, order, id, stageKey, stageDef);
   }
   else {
     await db.prepare(`
@@ -446,6 +423,65 @@ async function updateStageTime(user, id, stageKey, body) {
   `).run(start.value ?? null, planned.value ?? null, id, stageKey);
 
   return { status: 200, body: { message: '时间更新成功' } };
+}
+
+async function notifyReadyNextStages(db, order, id, stageKey, stageDef) {
+  const nextStages = STAGE_DEFINITIONS.filter(s => {
+    if (!s.dependsOn) return false;
+    return String(s.dependsOn).split(',').map(k => k.trim()).includes(stageKey);
+  });
+
+  const ready = [];
+  for (const nextStage of nextStages) {
+    const depKeys = String(nextStage.dependsOn).split(',').map(k => k.trim());
+    if (depKeys.length > 1) {
+      const placeholders = depKeys.map(() => '?').join(',');
+      const deps = await db.prepare(
+        `SELECT status FROM process_stages WHERE order_id = ? AND stage_key IN (${placeholders})`
+      ).all(id, ...depKeys);
+      if (!deps.every(d => d.status === 'completed')) continue;
+    }
+    ready.push(nextStage);
+  }
+  if (ready.length === 0) return;
+
+  const byRecipient = new Map();
+  for (const s of ready) {
+    const recKey = s.deptId ? `dept:${s.deptId}` : 'role:management';
+    if (!byRecipient.has(recKey)) {
+      byRecipient.set(recKey, { deptId: s.deptId || null, role: s.deptId ? null : 'management', names: [] });
+    }
+    byRecipient.get(recKey).names.push(s.name);
+  }
+
+  for (const [recKey, rec] of byRecipient) {
+    const message = `订单 ${order.order_no} 的"${stageDef.name}"已完成，请开始：${rec.names.join('、')}`;
+    try {
+      if (rec.deptId) {
+        await db.prepare(`
+          INSERT INTO notifications (order_id, message, recipient_dept_id, source_key)
+          VALUES (?, ?, ?, ?)
+          ON CONFLICT (source_key) WHERE source_key IS NOT NULL DO NOTHING
+        `).run(id, message, rec.deptId, `stage_completed:${id}:${stageKey}:${recKey}`);
+      } else {
+        await db.prepare(`
+          INSERT INTO notifications (order_id, message, recipient_role, source_key)
+          VALUES (?, ?, ?, ?)
+          ON CONFLICT (source_key) WHERE source_key IS NOT NULL DO NOTHING
+        `).run(id, message, rec.role, `stage_completed:${id}:${stageKey}:${recKey}`);
+      }
+    } catch (e) {
+      console.error(JSON.stringify({
+        ts: new Date().toISOString(),
+        level: 'error',
+        message: '阶段完成通知写入失败',
+        orderId: id,
+        stageKey,
+        nextStage: rec.names.join('、'),
+        error: e.message
+      }));
+    }
+  }
 }
 
 function validateStageUpdate(body) {
