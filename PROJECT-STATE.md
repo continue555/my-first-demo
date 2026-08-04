@@ -26,6 +26,7 @@
 - 流程：阶段完成通知改为“多依赖全部满足后才通知”并按部门/角色聚合；无负责部门节点（总经理签字）按 `recipient_role=management` 通知且可见性受控
 - 运维：超期检测改为服务器 cron 每 5 分钟执行（`scripts/check-overdue-cron.js`），前端不再轮询
 - 运维：应用日志 logrotate 每日轮转、压缩、保留 14 天（`deploy/logrotate.conf` + `scripts/install-logrotate.sh`）
+- 运维：PM2 配置 systemd 开机自启（pm2-ubuntu + pm2 save），重启后自动恢复 blowing-machine
 - 测试：新增 service 层单元测试（登录限流、阶段推进/并发唯一冲突、单订单导出工作簿），E2E 覆盖附件上传/预览、用户管理、批量导出
 - 前端：接入 Vitest + @vue/test-utils（组件/工具测试 14 项）；移动端可点击元素改为原生按钮并补 `aria-label` 与键盘焦点；TypeScript 按用户确认维持现状
 - 移动端兼容：viewport-fit=cover + safe-area 适配、输入框 16px 防 iOS 自动缩放、100dvh 视口适配；E2E 增加 iPhone 13/iPhone SE/Pixel 7/微信 UA 移动端矩阵
