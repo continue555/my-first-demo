@@ -52,7 +52,6 @@ async function login({ username, password, ip, secure }) {
       { name: 'csrf', value: csrfToken, options: { ...cookieOptions, httpOnly: false } }
     ],
     body: {
-      csrfToken,
       user: {
         id: user.id, username: user.username, name: user.name, role: user.role,
         department_id: user.department_id, dept_name: user.dept_name,

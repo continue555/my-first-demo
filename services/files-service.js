@@ -5,6 +5,7 @@ const { createDownloadTicket } = require('../lib/download-ticket');
 const { canDeleteFile } = require('../lib/file-permissions');
 
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
+const MAX_ORDER_FILES_BYTES = 200 * 1024 * 1024; // 单订单附件总量上限 200MB
 
 // 确保上传目录存在
 if (!fs.existsSync(UPLOAD_DIR)) {
@@ -48,6 +49,10 @@ function validateMagicBytes(filePath, mimeType) {
   return false;
 }
 
+function exceedsOrderFileQuota(currentTotal, addedBytes) {
+  return currentTotal + addedBytes > MAX_ORDER_FILES_BYTES;
+}
+
 async function listOrderFiles(orderId) {
   const db = getDb();
   const files = await db.prepare(`
@@ -77,6 +82,13 @@ async function saveUploadedFile({ orderId, user, file, stageKey }) {
   }
 
   const db = getDb();
+  const totalRow = await db.prepare('SELECT COALESCE(SUM(file_size), 0) AS total FROM order_files WHERE order_id = ?').get(orderId);
+  const currentTotal = Number(totalRow && totalRow.total) || 0;
+  if (exceedsOrderFileQuota(currentTotal, file.size)) {
+    fs.unlinkSync(file.path);
+    return { status: 400, body: { error: '该订单附件总量已达上限（200MB），请先清理部分附件' } };
+  }
+
   const originalName = fixOriginalName(file.originalname);
 
   try {
@@ -134,6 +146,8 @@ async function deleteFile(user, id) {
 
 module.exports = {
   UPLOAD_DIR,
+  MAX_ORDER_FILES_BYTES,
+  exceedsOrderFileQuota,
   listOrderFiles,
   createPreviewTicket,
   saveUploadedFile,
