@@ -43,6 +43,7 @@ async function main() {
   console.log('status counts:', JSON.stringify(statusCounts));
   if (statusCounts[500]) throw new Error('concurrent duplicate order produced 500');
   if (statusCounts[201] !== 1) throw new Error('expected exactly one created order');
+  if (!statusCounts[400]) throw new Error('expected duplicate order number rejected with 400');
 
   const created = results.find(r => r.status === 201);
   if (created.body.orderId) createdIds.push(created.body.orderId);

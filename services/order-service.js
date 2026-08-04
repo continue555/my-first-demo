@@ -214,10 +214,18 @@ async function createOrder(user, body) {
   }
   const orderNo = customOrderNo || generateOrderNo();
 
-  const result = await db.prepare(`
-    INSERT INTO orders (order_no, customer_name, project_name, product_model, quantity, contract_amount, planned_delivery_date, status, notes, created_by)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
-  `).run(orderNo, v.customer_name, v.project_name, v.product_model ?? null, v.quantity ?? 1, v.contract_amount ?? null, v.planned_delivery_date ?? null, v.notes ?? null, user.id);
+  let result;
+  try {
+    result = await db.prepare(`
+      INSERT INTO orders (order_no, customer_name, project_name, product_model, quantity, contract_amount, planned_delivery_date, status, notes, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
+    `).run(orderNo, v.customer_name, v.project_name, v.product_model ?? null, v.quantity ?? 1, v.contract_amount ?? null, v.planned_delivery_date ?? null, v.notes ?? null, user.id);
+  } catch (e) {
+    if (e && e.code === '23505') {
+      return { status: 400, body: { error: '订单编号已存在' } };
+    }
+    throw e;
+  }
 
   const orderId = result.lastInsertRowid;
 
@@ -377,15 +385,26 @@ async function updateStage(user, id, stageKey, body) {
       if (!s.dependsOn) return false;
       return String(s.dependsOn).split(',').map(k => k.trim()).includes(stageKey);
     });
-    nextStages.forEach(async (nextStage) => {
-      if (nextStage.deptId) {
+    for (const nextStage of nextStages) {
+      if (!nextStage.deptId) continue;
+      try {
         await db.prepare(`
           INSERT INTO notifications (order_id, message, recipient_dept_id, source_key)
           VALUES (?, ?, ?, ?)
           ON CONFLICT (source_key) WHERE source_key IS NOT NULL DO NOTHING
         `).run(id, `订单 ${order.order_no} 的"${stageDef.name}"已完成，请开始"${nextStage.name}"`, nextStage.deptId, `stage_completed:${id}:${stageKey}:${nextStage.key}`);
+      } catch (e) {
+        console.error(JSON.stringify({
+          ts: new Date().toISOString(),
+          level: 'error',
+          message: '阶段完成通知写入失败',
+          orderId: id,
+          stageKey,
+          nextStage: nextStage.key,
+          error: e.message
+        }));
       }
-    });
+    }
   }
   else {
     await db.prepare(`

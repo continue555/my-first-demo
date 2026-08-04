@@ -83,6 +83,8 @@ async function main() {
   console.log("=== 吹瓶机管理系统 - API 测试 ===\n");
 
   await test("Health check", async () => { const r = await req("GET", "/api/health"); return r.body.status === "ok" ? r.body : { error: "not ok" }; });
+  await test("Health check verifies database", async () => { const r = await req("GET", "/api/health"); return r.body.db === "ok" ? {} : { error: "db not ok: " + r.body.db }; });
+  await test("Uploads directory not publicly served", async () => { const r = await req("GET", "/uploads/export-jobs/export_1.xlsx"); return r.status === 404 ? {} : { error: "expected 404, got " + r.status }; });
   await test("Missing asset returns 404", async () => { const r = await req("GET", "/assets/__missing__.js"); return r.status === 404 ? {} : { error: "expected 404, got " + r.status }; });
   await test("Stale asset alias serves JS", async () => { const r = await req("GET", "/assets/index-CI0-ZRJE.js"); return r.status === 200 && typeof r.body === "string" && r.body.includes("import") ? {} : { error: "stale alias failed" }; });
   await test("Unknown old asset alias serves JS", async () => { const r = await req("GET", "/assets/OrderDetail-UNKNOWN.js"); return r.status === 200 && typeof r.body === "string" && r.body.includes("export") ? {} : { error: "dynamic alias failed" }; });

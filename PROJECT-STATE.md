@@ -20,6 +20,7 @@
 
 ## 近期完成（2026-08-03）
 
+- 安全加固：关闭 `/uploads` 静态裸访问（附件/导出仅走鉴权与票据接口）、健康检查增加数据库探活、订单编号唯一冲突由 500 改为 400、阶段完成通知 await 化并记录失败、nginx 上传上限与 multer 对齐 20MB
 - 移动端兼容：viewport-fit=cover + safe-area 适配、输入框 16px 防 iOS 自动缩放、100dvh 视口适配；E2E 增加 iPhone 13/iPhone SE/Pixel 7/微信 UA 移动端矩阵
 - 架构：auth/附件/导出业务已拆 service（`auth-service`、`files-service`、`export-service`），routes 全部为薄路由
 - 依赖：后端 exceljs 依赖的 uuid 已通过 npm overrides 升级至 11.1.1，后端生产依赖审计 0 漏洞（无需破坏性降级 exceljs）
@@ -39,6 +40,7 @@
 - `MONITOR_WEBHOOK` 未配置，配置后健康检查失败可推送告警
 - 真机（iOS/Android/微信）以 CI 模拟矩阵覆盖；如需实物机型回归，提供机型清单后补充
 - 备份“恢复演练”已通过一次，建议每周由定时任务持续验证
+- 备份保留在本机（用户已确认不采用异地备份），同机故障时依赖云厂商快照兜底，此项为已接受风险
 
 ## 架构速览
 

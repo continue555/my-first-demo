@@ -5,7 +5,7 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-const { initDatabase } = require('./database');
+const { initDatabase, getDb } = require('./database');
 const STALE_ASSET_ALIASES = require('./lib/stale-asset-map.json');
 const { csrfProtection } = require('./middleware/csrf');
 const exportRoutes = require('./routes/export');
@@ -77,11 +77,23 @@ app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/export', exportRoutes.router);
 app.use('/api/audit', require('./routes/audit'));
 app.use('/api', require('./routes/orders-files'));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // 健康检查
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString() });
+app.get('/api/health', async (req, res) => {
+  let db = 'ok';
+  try {
+    await getDb().prepare('SELECT 1').get();
+  } catch (e) {
+    db = 'error';
+    console.error(JSON.stringify({
+      ts: new Date().toISOString(),
+      level: 'error',
+      reqId: req.id,
+      message: '健康检查数据库探活失败: ' + e.message
+    }));
+  }
+  const body = { status: db === 'ok' ? 'ok' : 'degraded', db, uptime: process.uptime(), timestamp: new Date().toISOString() };
+  res.status(db === 'ok' ? 200 : 503).json(body);
 });
 
 // 缺失的静态资源返回 404，不能由 SPA 兜底成 HTML，否则浏览器会因 MIME 类型不符拒绝加载模块。
