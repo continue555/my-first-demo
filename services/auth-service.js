@@ -1,7 +1,7 @@
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const { getDb, logAudit } = require('../database');
-const { generateToken, getChildDeptIds } = require('../middleware/auth');
+const { generateToken, getChildDeptIds, bumpTokenVersion } = require('../middleware/auth');
 const sanitize = require('../lib/sanitize');
 const { parse, registerSchema, changePasswordSchema, resetPasswordSchema, updateUserSchema } = require('../lib/validators');
 
@@ -155,6 +155,7 @@ async function changePassword(userId, body) {
   if (!bcrypt.compareSync(oldPassword, user.password)) return { status: 400, body: { error: '原密码不正确' } };
   const hash = bcrypt.hashSync(newPassword, 10);
   await db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hash, userId);
+  await bumpTokenVersion(userId);
   return { status: 200, body: { message: '密码修改成功' } };
 }
 
@@ -218,6 +219,7 @@ async function resetPassword(actor, id, body) {
 
   const hash = bcrypt.hashSync(newPassword, 10);
   await db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hash, id);
+  await bumpTokenVersion(parseInt(id));
   await logAudit(actor.id, actor.name, '重置密码', 'user', parseInt(id), `用户名: ${user.username}`);
   return { status: 200, body: { message: '密码已重置' } };
 }

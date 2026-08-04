@@ -21,13 +21,14 @@
 ## 近期完成（2026-08-03）
 
 - 安全加固：关闭 `/uploads` 静态裸访问（附件/导出仅走鉴权与票据接口）、健康检查增加数据库探活、订单编号唯一冲突由 500 改为 400、阶段完成通知 await 化并记录失败、nginx 上传上限与 multer 对齐 20MB
+- 安全：JWT 服务端吊销（`users.token_version`），退出登录/修改密码/管理员重置密码后旧令牌立即失效
 - 移动端兼容：viewport-fit=cover + safe-area 适配、输入框 16px 防 iOS 自动缩放、100dvh 视口适配；E2E 增加 iPhone 13/iPhone SE/Pixel 7/微信 UA 移动端矩阵
 - 架构：auth/附件/导出业务已拆 service（`auth-service`、`files-service`、`export-service`），routes 全部为薄路由
 - 依赖：后端 exceljs 依赖的 uuid 已通过 npm overrides 升级至 11.1.1，后端生产依赖审计 0 漏洞（无需破坏性降级 exceljs）
 - 依赖：修复新增 brace-expansion 高危（2.1.3 → 2.1.4，GHSA-rgw5-rvv9-x895），后端全量审计 0 漏洞
 - 移动端体验：底部导航、订单卡片、筛选保留、预览全屏
 - 安全：HttpOnly Cookie + CSRF、限流持久化、角色白名单、附件权限、参数校验、stats 接口按角色限制
-- 测试：API 50 项、单元 19 项、压力测试（并发建单/阶段推进/50 单导出）、E2E、依赖审计
+- 测试：API 54 项、单元 19 项、压力测试（并发建单/阶段推进/50 单导出）、E2E、依赖审计
 - 并发修复：阶段完成通知插入改为 `ON CONFLICT DO NOTHING`
 - 依赖：xlsx 已替换为 read-excel-file；Vite 升级 7.3.6，前端审计 0 漏洞；zod 接入关键写接口
 - 架构：订单/审计/通知/auth/附件/导出业务已拆 service；结构化日志

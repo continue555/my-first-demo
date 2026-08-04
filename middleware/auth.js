@@ -7,7 +7,14 @@ if (!JWT_SECRET) { console.error('[FATAL] JWT_SECRET 未设置，请在 .env 中
 
 function generateToken(user) {
   return jwt.sign(
-    { id: user.id, username: user.username, role: user.role, department_id: user.department_id, name: user.name },
+    {
+      id: user.id,
+      username: user.username,
+      role: user.role,
+      department_id: user.department_id,
+      name: user.name,
+      ver: Number(user.token_version) || 0
+    },
     JWT_SECRET,
     { expiresIn: '24h' }
   );
@@ -35,9 +42,12 @@ function authMiddleware(req, res, next) {
   const db = getDb();
   if (!db) return res.status(500).json({ error: '服务器数据库未就绪' });
 
-  db.prepare('SELECT id, username, name, role, department_id FROM users WHERE id = ?').get(decoded.id)
+  db.prepare('SELECT id, username, name, role, department_id, token_version FROM users WHERE id = ?').get(decoded.id)
     .then(user => {
       if (!user) return res.status(401).json({ error: "账号已被删除，请重新登录" });
+      if ((decoded.ver || 0) !== (user.token_version || 0)) {
+        return res.status(401).json({ error: "登录已过期，请重新登录" });
+      }
       req.user = { ...decoded, ...user };
       next();
     })
@@ -70,10 +80,29 @@ async function getChildDeptIds(departmentId) {
   return children.map(c => c.id);
 }
 
+async function bumpTokenVersion(userId) {
+  const db = getDb();
+  await db.prepare('UPDATE users SET token_version = token_version + 1 WHERE id = ?').run(userId);
+}
+
+async function revokeSessionToken(token) {
+  if (!token) return;
+  let decoded;
+  try {
+    decoded = jwt.verify(token, JWT_SECRET);
+  } catch {
+    return;
+  }
+  await bumpTokenVersion(decoded.id);
+}
+
 async function departmentFilter(req, res, next) {
   if (req.user.role === 'admin' || req.user.role === 'management') return next();
   req.userDeptIds = await getDepartmentTreeIds(req.user.department_id);
   next();
 }
 
-module.exports = { JWT_SECRET, generateToken, authMiddleware, requireRole, departmentFilter, getDepartmentTreeIds, getChildDeptIds };
+module.exports = {
+  JWT_SECRET, generateToken, authMiddleware, requireRole, departmentFilter,
+  getDepartmentTreeIds, getChildDeptIds, bumpTokenVersion, revokeSessionToken
+};

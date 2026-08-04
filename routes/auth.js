@@ -1,5 +1,6 @@
 const express = require('express');
-const { authMiddleware, requireRole } = require('../middleware/auth');
+const { authMiddleware, requireRole, revokeSessionToken } = require('../middleware/auth');
+const { parseCookies } = require('../lib/cookies');
 const authService = require('../services/auth-service');
 
 const router = express.Router();
@@ -22,7 +23,10 @@ router.post('/login', async (req, res) => {
   res.status(result.status).json(result.body);
 });
 
-router.post('/logout', (req, res) => {
+router.post('/logout', async (req, res) => {
+  const header = req.headers.authorization;
+  const token = header && header.startsWith('Bearer ') ? header.slice(7) : parseCookies(req.headers.cookie).token;
+  await revokeSessionToken(token);
   res.clearCookie('token', { path: '/' });
   res.clearCookie('csrf', { path: '/' });
   res.json({ message: '已退出登录' });

@@ -94,6 +94,37 @@ async function main() {
   const login = await loginUser("admin", "123456");
   await test("Login", async () => login.body.user ? {} : { error: "login failed" });
   await test("Login response hides token", async () => { const r = await loginUser("admin", "123456"); return !("token" in r.body) ? {} : { error: "token still returned" }; });
+  await test("Logout revokes token", async () => {
+    const login = await loginUser("admin", "123456");
+    if (!login.body.user || !token) return { error: "login failed" };
+    const out = await req("POST", "/api/auth/logout");
+    if (out.status !== 200) return { error: "logout failed" };
+    const after = await req("GET", "/api/orders?limit=1");
+    if (after.status !== 401) return { error: "expected 401 after logout, got " + after.status };
+    const relogin = await loginUser("admin", "123456");
+    return relogin.body.user ? {} : { error: "re-login failed" };
+  });
+  await test("Reset password revokes target session", async () => {
+    const username = "resetuser_" + Date.now();
+    const create = await req("POST", "/api/auth/register", { username, password: "123456", name: "ResetUser", role: "sales", department_id: 1 });
+    if (create.status !== 201) return { error: "register failed: " + JSON.stringify(create.body) };
+    const users = await req("GET", "/api/auth/users");
+    const u = (users.body.users || []).find(x => x.username === username);
+    if (!u) return { error: "user not found" };
+    const oldToken = token;
+    const target = await loginUser(username, "123456");
+    if (!target.body.user) { token = oldToken; return { error: "target login failed" }; }
+    const targetToken = token;
+    token = oldToken;
+    const reset = await req("PUT", `/api/auth/users/${u.id}/reset-password`, { newPassword: "654321" });
+    if (reset.status !== 200) { token = oldToken; return { error: "reset failed: " + JSON.stringify(reset.body) }; }
+    token = targetToken;
+    const after = await req("GET", "/api/orders?limit=1");
+    token = oldToken;
+    if (after.status !== 401) return { error: "expected 401 after reset, got " + after.status };
+    const del = await req("DELETE", `/api/auth/users/${u.id}`);
+    return del.status === 200 ? {} : { error: "cleanup failed" };
+  });
   if (!token) { console.log("\n登录失败，测试终止"); process.exit(1); }
 
   await test("Stats", async () => { const r = await req("GET", "/api/orders/stats"); return r.body.stats ? {} : { error: "no stats" }; });
