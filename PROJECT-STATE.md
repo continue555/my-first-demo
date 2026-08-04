@@ -22,6 +22,7 @@
 
 - 安全加固：关闭 `/uploads` 静态裸访问（附件/导出仅走鉴权与票据接口）、健康检查增加数据库探活、订单编号唯一冲突由 500 改为 400、阶段完成通知 await 化并记录失败、nginx 上传上限与 multer 对齐 20MB
 - 安全：JWT 服务端吊销（`users.token_version`），退出登录/修改密码/管理员重置密码后旧令牌立即失效
+- 运维：应用日志 logrotate 每日轮转、压缩、保留 14 天（`deploy/logrotate.conf` + `scripts/install-logrotate.sh`）
 - 移动端兼容：viewport-fit=cover + safe-area 适配、输入框 16px 防 iOS 自动缩放、100dvh 视口适配；E2E 增加 iPhone 13/iPhone SE/Pixel 7/微信 UA 移动端矩阵
 - 架构：auth/附件/导出业务已拆 service（`auth-service`、`files-service`、`export-service`），routes 全部为薄路由
 - 依赖：后端 exceljs 依赖的 uuid 已通过 npm overrides 升级至 11.1.1，后端生产依赖审计 0 漏洞（无需破坏性降级 exceljs）

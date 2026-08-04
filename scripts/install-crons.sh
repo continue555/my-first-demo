@@ -15,3 +15,5 @@ EOF
 crontab "$CRON_FILE"
 echo "[install-crons] installed"
 crontab -l | tail -5
+
+bash "$BASE/scripts/install-logrotate.sh"
