@@ -158,7 +158,6 @@ tr:hover td { background: #f8fafc; }
 .stage-indicator.pending { background: #cbd5e1; }
 .stage-indicator.in_progress { background: var(--warning); box-shadow: 0 0 0 4px var(--warning-bg); animation: pulse 1.5s infinite; }
 .stage-indicator.completed { background: var(--success); box-shadow: 0 0 0 4px #d1fae5; }
-.stage-indicator.delayed { background: var(--danger); box-shadow: 0 0 0 4px var(--danger-bg); }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.6; } }
 .stage-info { flex: 1; min-width: 200px; }
 .stage-name { font-weight: 600; font-size: 14px; color: var(--text); }

@@ -8,7 +8,7 @@ const sanitize = require('../lib/sanitize');
 const { canOperateStage } = require('../lib/stage-permissions');
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 
-const ORDER_STATUSES = ['pending', 'in_progress', 'completed', 'delayed'];
+const ORDER_STATUSES = ['pending', 'in_progress', 'completed'];
 const STAGE_STATUSES = ['pending', 'in_progress', 'completed'];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -354,7 +354,7 @@ async function updateStage(user, id, stageKey, body) {
     `).run(status, now, notes ?? null, user.id, user.name, id, stageKey);
 
     // 更新订单状态为进行中
-    if (order.status === 'pending' || order.status === 'delayed') {
+    if (order.status === 'pending') {
       await db.prepare("UPDATE orders SET status = 'in_progress', updated_at = datetime('now', '+8 hours') WHERE id = ?").run(id);
     }
   }

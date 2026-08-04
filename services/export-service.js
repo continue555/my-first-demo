@@ -127,7 +127,7 @@ function getOverdueColor(stage) {
   if (!info) return null;
   if (info.cssClass === 'overdue-red') {
     if (stage.status === 'completed') return { bg: 'f3f4f6', fg: '374151' };
-    if (stage.status === 'in_progress' || stage.status === 'delayed') return { bg: 'fee2e2', fg: 'dc2626' };
+    if (stage.status === 'in_progress') return { bg: 'fee2e2', fg: 'dc2626' };
     return null;
   }
   if (info.cssClass === 'overdue-green') return { bg: 'd1fae5', fg: '059669' };
@@ -529,7 +529,7 @@ async function buildSingleOrderWorkbook(order, stages, files, downloadBase, user
 
 // === 导出业务 ===
 
-const VALID_STATUSES = ['pending', 'in_progress', 'completed', 'delayed'];
+const VALID_STATUSES = ['pending', 'in_progress', 'completed'];
 
 async function runListExport({ query, downloadBase, userId }) {
   const { status } = query;

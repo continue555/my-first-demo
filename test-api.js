@@ -327,6 +327,11 @@ async function main() {
     return dl.status === 200 ? {} : { error: "download failed" };
   });
   await test("Cancelled export rejected", async () => { const r = await req("GET", "/api/export/orders?status=cancelled"); return r.status === 400 ? {} : { error: "expected 400, got " + r.status }; });
+  await test("Delayed status rejected everywhere", async () => {
+    const r1 = await req("POST", "/api/export/jobs", { status: "delayed" });
+    const r2 = await req("PUT", `/api/orders/${createdOrderId}`, { status: "delayed" });
+    return r1.status === 400 && r2.status === 400 ? {} : { error: "expected 400 for delayed, got " + r1.status + "/" + r2.status };
+  });
   await test("Permission (finance denied)", async () => {
     const oldToken = token;
     const r2 = await loginUser("caiwu1", "123456");

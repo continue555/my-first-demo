@@ -2,6 +2,5 @@
   "pending": "未开始",
   "in_progress": "进行中",
   "completed": "已完成",
-  "delayed": "已延期",
   "cancelled": "已取消"
 }
