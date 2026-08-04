@@ -143,16 +143,12 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
-import { useToastStore } from '@/stores/toast';
-import { api } from '@/api';
 import { roleLabel as roleLabelText } from '@/utils/labels';
 
 const auth = useAuthStore();
 const router = useRouter();
-const toast = useToastStore();
 
 let notifTimer = null;
-let checkTimer = null;
 const showMore = ref(false);
 
 const roleLabel = computed(() => roleLabelText(auth.user?.role));
@@ -166,21 +162,6 @@ async function loadNotifCount() {
   await auth.refreshUnreadCount();
 }
 
-async function checkOverdue() {
-  try {
-    const data = await api.post('/notifications/check-overdue');
-    if (data.created > 0) {
-      await auth.refreshUnreadCount();
-      data.newNotifs?.forEach(n => {
-        toast.show(n.message, 'warning');
-        if ('Notification' in window && Notification.permission === 'granted') {
-          try { new Notification('流程超期提醒', { body: n.message, icon: '/favicon.ico' }); } catch { /* ignore */ }
-        }
-      });
-    }
-  } catch { /* ignore */ }
-}
-
 function showChangePassword() {
   showMore.value = false;
   router.push('/login?changePassword=1');
@@ -189,7 +170,6 @@ function showChangePassword() {
 async function doLogout() {
   await auth.logout();
   if (notifTimer) clearInterval(notifTimer);
-  if (checkTimer) clearInterval(checkTimer);
   router.push('/login');
 }
 
@@ -197,16 +177,10 @@ onMounted(() => {
   auth.refreshUser();
   loadNotifCount();
   notifTimer = setInterval(loadNotifCount, 30000);
-  checkOverdue();
-  checkTimer = setInterval(checkOverdue, 30000);
-  if ('Notification' in window && Notification.permission === 'default') {
-    Notification.requestPermission();
-  }
 });
 
 onUnmounted(() => {
   if (notifTimer) clearInterval(notifTimer);
-  if (checkTimer) clearInterval(checkTimer);
 });
 </script>
 

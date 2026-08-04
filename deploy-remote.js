@@ -113,6 +113,7 @@ conn.on('ready', () => {
         ['scripts/install-crons.sh', `${BASE}/scripts/install-crons.sh`],
         ['scripts/install-logrotate.sh', `${BASE}/scripts/install-logrotate.sh`],
         ['scripts/log-query.sh', `${BASE}/scripts/log-query.sh`],
+        ['scripts/check-overdue-cron.js', `${BASE}/scripts/check-overdue-cron.js`],
         ['deploy/deploy.sh', `${BASE}/deploy/deploy.sh`],
         ['deploy/server-deploy.sh', `${BASE}/deploy/server-deploy.sh`],
         ['deploy/rollback.sh', `${BASE}/deploy/rollback.sh`],

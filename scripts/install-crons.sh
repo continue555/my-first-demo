@@ -6,10 +6,11 @@ BASE="$(cd "$(dirname "$0")/.." && pwd)"
 CRON_FILE="/tmp/blowing-machine-cron"
 mkdir -p "$BASE/logs"
 
-crontab -l 2>/dev/null | grep -v 'backup-cron\|health-check\|restore-drill' > "$CRON_FILE" || true
+crontab -l 2>/dev/null | grep -v 'backup-cron\|health-check\|restore-drill\|check-overdue-cron' > "$CRON_FILE" || true
 cat >> "$CRON_FILE" <<EOF
 0 2 * * * cd $BASE && bash backup-cron.sh >> $BASE/logs/backup.log 2>&1
 */5 * * * * cd $BASE && bash scripts/health-check.sh >> $BASE/logs/health.log 2>&1
+*/5 * * * * cd $BASE && node scripts/check-overdue-cron.js >> $BASE/logs/overdue.log 2>&1
 0 3 * * 0 cd $BASE && bash scripts/restore-drill.sh >> $BASE/logs/restore-drill.log 2>&1
 EOF
 crontab "$CRON_FILE"
