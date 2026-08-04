@@ -142,6 +142,14 @@ async function runMobileFlow(page, label) {
     if ((await item.count()) === 0) throw new Error('uploaded file not listed');
     await item.locator('button', { hasText: '预览' }).click();
     await page.waitForSelector('.doc-preview-modal', { timeout: 15000 });
+    await page.waitForFunction(
+      () => {
+        const body = document.querySelector('.doc-preview-body');
+        return body && body.textContent.includes('e2e attachment content');
+      },
+      null,
+      { timeout: 15000 }
+    );
     const previewText = await page.locator('.doc-preview-body').innerText();
     if (!previewText.includes('e2e attachment content')) throw new Error('preview content missing');
     await page.locator('.doc-preview-modal .image-preview-header button').click();
@@ -161,8 +169,8 @@ async function runMobileFlow(page, label) {
     await modal.locator('select').nth(0).selectOption('sales');
     await modal.locator('select').nth(1).selectOption('1');
     await modal.locator('.modal-actions .btn-primary').click();
-    await page.waitForSelector('tbody tr', { hasText: username }, { timeout: 15000 });
     const row = page.locator('tbody tr', { hasText: username });
+    await row.first().waitFor({ timeout: 15000 });
     if ((await row.count()) === 0) throw new Error('user row not found');
     await row.locator('button', { hasText: '删除' }).click();
     await page.waitForSelector('.modal-overlay', { timeout: 10000 });
