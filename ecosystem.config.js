@@ -1,4 +1,4 @@
-﻿module.exports = {
+module.exports = {
   apps: [{
     name: 'blowing-machine',
     script: 'server.js',

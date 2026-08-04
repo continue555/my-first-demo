@@ -1,4 +1,4 @@
-﻿const http = require("http");
+const http = require("http");
 
 const STAGE_DEFINITIONS = require("./shared/stage-defs.json");
 const ExcelJS = require("exceljs");
