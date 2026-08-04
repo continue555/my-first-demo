@@ -117,7 +117,18 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run build
+      - name: Check assets and stale map in sync
+        run: node ../scripts/check-assets-in-sync.js
       - run: npm test
+
+  deploy-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: node scripts/check-deploy-manifest.js
 
   e2e:
     runs-on: ubuntu-latest

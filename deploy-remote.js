@@ -114,6 +114,8 @@ conn.on('ready', () => {
         ['scripts/install-logrotate.sh', `${BASE}/scripts/install-logrotate.sh`],
         ['scripts/log-query.sh', `${BASE}/scripts/log-query.sh`],
         ['scripts/check-overdue-cron.js', `${BASE}/scripts/check-overdue-cron.js`],
+        ['scripts/check-assets-in-sync.js', `${BASE}/scripts/check-assets-in-sync.js`],
+        ['scripts/check-deploy-manifest.js', `${BASE}/scripts/check-deploy-manifest.js`],
         ['deploy/deploy.sh', `${BASE}/deploy/deploy.sh`],
         ['deploy/server-deploy.sh', `${BASE}/deploy/server-deploy.sh`],
         ['deploy/rollback.sh', `${BASE}/deploy/rollback.sh`],
@@ -123,6 +125,20 @@ conn.on('ready', () => {
         ['deploy/blowing-machine-https.conf', `${BASE}/deploy/blowing-machine-https.conf`],
         ['.env.example', `${BASE}/.env.example`]
       ];
+      const localMissing = files.filter(([local]) => !fs.existsSync(path.join(root, local)));
+      if (localMissing.length > 0) {
+        console.error('MISSING LOCAL FILES: ' + localMissing.map(([l]) => l).join(', '));
+        process.exit(1);
+      }
+
+      const staleMap = JSON.parse(fs.readFileSync(path.join(root, 'lib', 'stale-asset-map.json'), 'utf8'));
+      const assetFiles = new Set(fs.readdirSync(path.join(root, 'public', 'assets')));
+      const staleMissing = Object.values(staleMap).filter(v => !assetFiles.has(v));
+      if (staleMissing.length > 0) {
+        console.error('STALE ASSET MAP MISSING TARGETS: ' + staleMissing.join(', '));
+        process.exit(1);
+      }
+
       for (const [local, remote] of files) {
         await put(path.join(root, local), remote);
       }
