@@ -349,6 +349,10 @@ async function updateStage(user, id, stageKey, body) {
     return { status: 404, body: { error: '流程节点不存在' } };
   }
 
+  if (stage.status === 'completed' && status !== 'completed') {
+    return { status: 400, body: { error: '该流程节点已完成，不能回退状态' } };
+  }
+
   // 权限校验：检查用户是否有权操作此节点
   if (user.role !== 'admin' && user.role !== 'management' && !(await canOperateStage(user, stage))) {
     return { status: 403, body: { error: stage.department_id ? '您没有权限操作此流程节点' : '该节点无负责部门，请联系管理员' } };
@@ -382,6 +386,9 @@ async function updateStage(user, id, stageKey, body) {
   }
   // 如果改为已完成
   else if (status === 'completed') {
+    if (stage.status === 'completed') {
+      return { status: 400, body: { error: '该流程节点已完成，不能重复完成' } };
+    }
     // 不允许从 pending 直接跳到 completed
     if (stage.status === 'pending') {
       return { status: 400, body: { error: '该流程节点尚未开始，无法直接完成' } };

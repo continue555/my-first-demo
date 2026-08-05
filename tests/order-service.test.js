@@ -99,6 +99,38 @@ test('updateStage requires time before start', async () => {
   }
 });
 
+test('updateStage rejects duplicate completion', async () => {
+  const fake = recordingDb({
+    stageFor: key => ({ ...genericStage(key), status: 'completed' }),
+    allStatuses: notAllDone
+  });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStage(admin, 1, 'purchase_frame', { status: 'completed' });
+    assert.equal(r.status, 400);
+    assert.ok(r.body.error.includes('不能重复完成'));
+  } finally {
+    database.getDb = original;
+  }
+});
+
+test('updateStage rejects rollback of completed stage', async () => {
+  const fake = recordingDb({
+    stageFor: key => ({ ...genericStage(key), status: 'completed' }),
+    allStatuses: notAllDone
+  });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStage(admin, 1, 'purchase_frame', { status: 'pending' });
+    assert.equal(r.status, 400);
+    assert.ok(r.body.error.includes('不能回退状态'));
+  } finally {
+    database.getDb = original;
+  }
+});
+
 test('createOrder returns 400 on unique violation', async () => {
   const original = database.getDb;
   database.getDb = () => fakeDb({
