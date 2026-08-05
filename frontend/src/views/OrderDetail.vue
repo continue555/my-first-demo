@@ -129,7 +129,7 @@
                   <template v-if="auth.canOperateStage(ps)">
                     <button v-if="ps.status === 'pending'" class="btn btn-success btn-sm" @click="updateStage(ps, 'in_progress')">开始</button>
                     <button v-if="ps.status === 'in_progress'" class="btn btn-primary btn-sm" @click="updateStage(ps, 'completed')">完成</button>
-                    <button v-if="!isFollowUpStage(ps) && (!ps.start_date || !ps.planned_end_date || auth.isAdmin || auth.isManagement)" class="btn btn-outline btn-sm" aria-label="设置时间" @click="showTimeModal(ps)">⏱</button>
+                    <button v-if="!isFollowUpStage(ps) && ps.stage_key !== 'material_in' && (!ps.start_date || !ps.planned_end_date || auth.isAdmin || auth.isManagement)" class="btn btn-outline btn-sm" aria-label="设置时间" @click="showTimeModal(ps)">⏱</button>
                   </template>
                   <span v-else-if="!auth.isUserDept(ps.department_id)" style="font-size:11px;color:var(--text-secondary)">无权限</span>
                 </div>
