@@ -513,9 +513,10 @@ function formatSize(bytes) {
 
 async function updateStage(stage, status) {
   // 点击"开始"时，检查是否已设置时间
-  if (status === 'in_progress' && stage.status === 'pending' && (!stage.start_date || !stage.planned_end_date)) {
-    toast.show('请先设置开始时间和计划完成时间', 'error');
-    showTimeModal(stage);
+  const autoStage = isFollowUpStage(stage) || stage.stage_key === 'material_in';
+  if (status === 'in_progress' && stage.status === 'pending' && (!stage.planned_end_date || (!autoStage && !stage.start_date))) {
+    toast.show(autoStage ? '计划完成时间未生成，请先确认采购计划到货时间' : '请先设置开始时间和计划完成时间', 'error');
+    if (!autoStage) showTimeModal(stage);
     return;
   }
   try {
