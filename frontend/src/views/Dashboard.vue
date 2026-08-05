@@ -4,11 +4,11 @@
       <h2>仪表盘 <span v-if="refreshing" class="dash-refresh-indicator show">刷新中...</span></h2>
     </div>
     <div class="stats-row">
-      <div class="stat-card" @click="$router.push('/orders')" style="cursor:pointer;">
+      <div class="stat-card" @click="navigateTo('/orders')" style="cursor:pointer;">
         <div class="stat-icon total"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg></div>
         <div class="stat-body"><div class="stat-number">{{ stats.total }}</div><div class="stat-label">总订单数</div></div>
       </div>
-      <div class="stat-card" @click="$router.push('/orders')" style="cursor:pointer;">
+      <div class="stat-card" @click="navigateTo('/orders')" style="cursor:pointer;">
         <div class="stat-icon progress"><svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"/></svg></div>
         <div class="stat-body"><div class="stat-number">{{ stats.inProgress }}</div><div class="stat-label">进行中</div></div>
       </div>
@@ -21,7 +21,7 @@
       <div class="dashboard-card">
         <div class="dashboard-card-header">
           <span class="dash-title">最近订单</span>
-          <span class="dash-link" @click="$router.push('/orders')">查看全部 →</span>
+          <span class="dash-link" @click="navigateTo('/orders')">查看全部 →</span>
         </div>
         <div class="dashboard-card-body">
           <div v-if="recentOrders === null" class="dash-empty" style="visibility:hidden">暂无订单</div>
@@ -57,7 +57,7 @@
         <div class="dashboard-card">
           <div class="dashboard-card-header">
             <span class="dash-title">最近通知</span>
-            <span class="dash-link" @click="$router.push('/notifications')">查看全部 →</span>
+            <span class="dash-link" @click="navigateTo('/notifications')">查看全部 →</span>
           </div>
           <div class="dashboard-card-body">
             <div v-if="recentNotifs === null" class="dash-empty" style="visibility:hidden">暂无通知</div>

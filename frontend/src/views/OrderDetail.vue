@@ -17,7 +17,7 @@
     <div class="page-header">
       <h2>订单详情 - {{ order.order_no }}</h2>
       <div class="actions">
-        <button class="btn btn-outline" @click="$router.push('/orders')">返回列表</button>
+        <button class="btn btn-outline" @click="backToList">返回列表</button>
         <button class="btn btn-outline btn-sm" @click="exportOrder">导出Excel</button>
         <button v-if="auth.canDeleteOrder" class="btn btn-danger btn-sm" @click="deleteOrder">删除订单</button>
       </div>
@@ -192,6 +192,7 @@ import { useModalStore } from '@/stores/modal';
 import { api } from '@/api';
 import { uploadFile, getFiles, deleteFile, getFilePreviewTicket } from '@/api';
 import { getOverdueInfo, statusText } from '@/utils';
+import { navigateTo } from '@/utils/navigation';
 
 const route = useRoute();
 const router = useRouter();
@@ -254,6 +255,10 @@ async function load() {
 
 function retry() {
   load();
+}
+
+function backToList() {
+  navigateTo('/orders');
 }
 
 async function loadFiles() {
@@ -545,7 +550,7 @@ function deleteOrder() {
       try {
         await api.del(`/orders/${order.value.id}`);
         toast.show('订单已删除');
-        router.push('/orders');
+        navigateTo('/orders');
       } catch (e) {
         toast.show(e.message, 'error');
       }
@@ -719,4 +724,3 @@ onUnmounted(() => {
   }
 }
 </style>
-

@@ -16,7 +16,7 @@ tar --exclude=node_modules --exclude=uploads --exclude=releases --exclude=.env \
 
 if [ "${1:-}" = "--install" ]; then
   echo "[server-deploy] install dependencies"
-  npm ci
+  npm ci --omit=dev
   (cd frontend && npm ci)
 fi
 

@@ -141,12 +141,11 @@
 
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue';
-import { useRouter } from 'vue-router';
 import { useAuthStore } from '@/stores/auth';
+import { navigateTo } from '@/utils/navigation';
 import { roleLabel as roleLabelText } from '@/utils/labels';
 
 const auth = useAuthStore();
-const router = useRouter();
 
 let notifTimer = null;
 const showMore = ref(false);
@@ -155,7 +154,7 @@ const roleLabel = computed(() => roleLabelText(auth.user?.role));
 
 function goMore(path) {
   showMore.value = false;
-  router.push(path);
+  navigateTo(path);
 }
 
 async function loadNotifCount() {
@@ -164,13 +163,13 @@ async function loadNotifCount() {
 
 function showChangePassword() {
   showMore.value = false;
-  router.push('/login?changePassword=1');
+  navigateTo('/login?changePassword=1');
 }
 
 async function doLogout() {
   await auth.logout();
   if (notifTimer) clearInterval(notifTimer);
-  router.push('/login');
+  navigateTo('/login');
 }
 
 onMounted(() => {
