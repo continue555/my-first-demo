@@ -145,7 +145,11 @@
       <div class="modal">
         <h3>设置时间 - {{ timeModal.stageName }}</h3>
         <div class="form-group"><label>{{ timeModal.isPurchase ? '下单日期' : '开始日期' }}</label><input v-model="timeModal.startDate" type="date"></div>
-        <div class="form-group"><label>{{ timeModal.isPurchase ? '计划到货日期' : '计划完成日期' }}</label><input v-model="timeModal.plannedEnd" type="date"></div>
+        <div class="form-group">
+          <label>{{ timeModal.isPurchase ? '计划到货日期' : '计划完成日期' }}</label>
+          <input v-model="timeModal.plannedEnd" type="date" :disabled="timeModal.plannedLocked">
+          <div v-if="timeModal.plannedLocked" class="time-lock-hint">由采购计划到货自动生成，无需手动填写</div>
+        </div>
         <div class="modal-actions">
           <button class="btn btn-outline" @click="timeModal.visible = false">取消</button>
           <button class="btn btn-primary" @click="saveTime">保存</button>
@@ -528,7 +532,8 @@ function showTimeModal(stage) {
   timeModal.value = {
     visible: true, orderId: order.value.id, stageKey: stage.stage_key,
     stageName: stage.stage_name, startDate: stage.start_date || '', plannedEnd: stage.planned_end_date || '',
-    isPurchase: isPurchaseStage(stage)
+    isPurchase: isPurchaseStage(stage),
+    plannedLocked: isFollowUpStage(stage) || stage.stage_key === 'material_in'
   };
 }
 
@@ -686,6 +691,11 @@ onUnmounted(() => {
   font-size: 14px;
   font-weight: 600;
   margin-bottom: 10px;
+}
+.time-lock-hint {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--text-secondary);
 }
 .doc-preview-modal {
   background: #fff;

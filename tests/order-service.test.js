@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const database = require('../database');
-const { validateStageUpdate, createOrder, updateStage } = require('../services/order-service');
+const { validateStageUpdate, createOrder, updateStage, updateStageTime } = require('../services/order-service');
 
 function fakeDb(handlers = {}) {
   return {
@@ -249,6 +249,123 @@ test('null-department stage notifies management role', withNoopAudit(async () =>
     assert.equal(fake.inserts[0][2], 'management');
     assert.equal(fake.inserts[0].length, 4);
     assert.ok(fake.inserts[0][1].includes('总经理签字'));
+  } finally {
+    database.getDb = original;
+  }
+}));
+
+function recordingDb({ stageFor, plannedRows, allStatuses, depsStatuses }) {
+  const runs = [];
+  return {
+    runs,
+    prepare(sql) {
+      return {
+        async get(...params) {
+          if (sql.includes('FROM orders')) return orderRow;
+          if (sql.includes('FROM process_stages') && sql.includes('stage_key = ?')) return stageFor ? stageFor(params[1]) : null;
+          return null;
+        },
+        async all(...params) {
+          if (sql.includes('SELECT planned_end_date FROM process_stages') && sql.includes('stage_key IN')) return plannedRows || [];
+          if (sql.includes('SELECT status FROM process_stages') && sql.includes('stage_key IN')) return depsStatuses || [];
+          if (sql.includes('SELECT status FROM process_stages')) return allStatuses || [];
+          return [];
+        },
+        async run(...params) {
+          runs.push({ sql, params });
+          return { changes: 1, lastInsertRowid: 1 };
+        }
+      };
+    }
+  };
+}
+
+const genericStage = key => ({
+  id: 10, stage_key: key, status: 'in_progress', department_id: 5,
+  start_date: '2026-08-01', planned_end_date: '2026-08-01'
+});
+
+test('purchase planned date syncs follow-up and material_in', async () => {
+  const fake = recordingDb({
+    stageFor: genericStage,
+    plannedRows: [
+      { planned_end_date: '2026-08-10' }, { planned_end_date: '2026-08-12' },
+      { planned_end_date: null }, { planned_end_date: null }, { planned_end_date: null }
+    ]
+  });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStageTime(admin, 1, 'purchase_frame', { start_date: '2026-08-01', planned_end_date: '2026-08-10' });
+    assert.equal(r.status, 200);
+    const followUp = fake.runs.find(x => x.sql.includes('stage_key = ?') && x.params.includes('frame_follow_up'));
+    assert.ok(followUp && followUp.params[0] === '2026-08-10');
+    const materialIn = fake.runs.find(x => x.sql.includes("stage_key = 'material_in'"));
+    assert.ok(materialIn && materialIn.params[0] === '2026-08-12');
+  } finally {
+    database.getDb = original;
+  }
+});
+
+test('follow-up planned date is locked', async () => {
+  const fake = recordingDb({ stageFor: genericStage });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStageTime(admin, 1, 'frame_follow_up', { start_date: '2026-08-05', planned_end_date: '2026-08-10' });
+    assert.equal(r.status, 400);
+    assert.ok(r.body.error.includes('自动生成'));
+  } finally {
+    database.getDb = original;
+  }
+});
+
+test('material_in planned date is locked', async () => {
+  const fake = recordingDb({ stageFor: genericStage });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStageTime(admin, 1, 'material_in', { start_date: '2026-08-05', planned_end_date: '2026-08-10' });
+    assert.equal(r.status, 400);
+    assert.ok(r.body.error.includes('自动生成'));
+  } finally {
+    database.getDb = original;
+  }
+});
+
+test('follow-up completion backfills purchase actual arrival', withNoopAudit(async () => {
+  const fake = recordingDb({
+    stageFor: genericStage,
+    allStatuses: notAllDone,
+    depsStatuses: Array.from({ length: 5 }, () => ({ status: 'completed' }))
+  });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStage(admin, 1, 'frame_follow_up', { status: 'completed' });
+    assert.equal(r.status, 200);
+    const backfill = fake.runs.find(x => x.sql.includes('actual_end_date IS NULL'));
+    assert.ok(backfill && backfill.params.includes('purchase_frame'));
+  } finally {
+    database.getDb = original;
+  }
+}));
+
+test('material_in completion backfills all purchase actual arrival', withNoopAudit(async () => {
+  const fake = recordingDb({
+    stageFor: genericStage,
+    allStatuses: notAllDone
+  });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStage(admin, 1, 'material_in', { status: 'completed' });
+    assert.equal(r.status, 200);
+    const backfill = fake.runs.find(x => x.sql.includes('GREATEST(COALESCE(actual_end_date'));
+    assert.ok(backfill);
+    for (const key of ['purchase_frame', 'purchase_mold_frame', 'purchase_electrical', 'purchase_cover', 'mold_design_purchase']) {
+      assert.ok(backfill.params.includes(key));
+    }
   } finally {
     database.getDb = original;
   }

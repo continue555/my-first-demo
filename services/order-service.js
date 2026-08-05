@@ -12,6 +12,19 @@ const ORDER_STATUSES = ['pending', 'in_progress', 'completed'];
 const STAGE_STATUSES = ['pending', 'in_progress', 'completed'];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
+const PURCHASE_STAGE_KEYS = ['purchase_frame', 'purchase_mold_frame', 'purchase_electrical', 'purchase_cover', 'mold_design_purchase'];
+const FOLLOW_UP_STAGE_KEYS = ['frame_follow_up', 'mold_frame_follow_up', 'electrical_follow_up', 'cover_follow_up', 'mold_design_follow_up'];
+const PURCHASE_TO_FOLLOW_UP = {
+  purchase_frame: 'frame_follow_up',
+  purchase_mold_frame: 'mold_frame_follow_up',
+  purchase_electrical: 'electrical_follow_up',
+  purchase_cover: 'cover_follow_up',
+  mold_design_purchase: 'mold_design_follow_up'
+};
+const FOLLOW_UP_TO_PURCHASE = Object.fromEntries(
+  Object.entries(PURCHASE_TO_FOLLOW_UP).map(([purchase, followUp]) => [followUp, purchase])
+);
+
 function cleanText(value, max) {
   if (value === undefined || value === null) return '';
   return sanitize(String(value).trim()).slice(0, max);
@@ -365,10 +378,29 @@ async function updateStage(user, id, stageKey, body) {
       return { status: 400, body: { error: '该流程节点尚未开始，无法直接完成' } };
     }
 
+    // 采购节点的实际到货时间由采购跟进/物料进仓确认后回填，完成时不写入
+    const actualEnd = PURCHASE_STAGE_KEYS.includes(stageKey) ? null : now;
     await db.prepare(`
       UPDATE process_stages SET status = ?, start_date = COALESCE(start_date, ?), actual_end_date = ?, notes = COALESCE(?, notes), operator_id = ?, operator_name = ?, updated_at = datetime('now', '+8 hours')
       WHERE order_id = ? AND stage_key = ?
-    `).run(status, now, now, notes ?? null, user.id, user.name, id, stageKey);
+    `).run(status, now, actualEnd, notes ?? null, user.id, user.name, id, stageKey);
+
+    // 采购跟进确认到货后，回填对应采购的实际到货时间（取更晚值）
+    if (FOLLOW_UP_TO_PURCHASE[stageKey]) {
+      await db.prepare(`
+        UPDATE process_stages SET actual_end_date = ?, updated_at = datetime('now', '+8 hours')
+        WHERE order_id = ? AND stage_key = ? AND (actual_end_date IS NULL OR actual_end_date < ?)
+      `).run(now, id, FOLLOW_UP_TO_PURCHASE[stageKey], now);
+    }
+
+    // 物料进仓确认到货后，统一回填所有采购的实际到货时间（取最晚值）
+    if (stageKey === 'material_in') {
+      const placeholders = PURCHASE_STAGE_KEYS.map(() => '?').join(',');
+      await db.prepare(`
+        UPDATE process_stages SET actual_end_date = GREATEST(COALESCE(actual_end_date, ''), ?), updated_at = datetime('now', '+8 hours')
+        WHERE order_id = ? AND stage_key IN (${placeholders})
+      `).run(now, id, ...PURCHASE_STAGE_KEYS);
+    }
 
     // 检查是否所有阶段都完成
     const allStages = await db.prepare('SELECT status FROM process_stages WHERE order_id = ?').all(id);
@@ -400,6 +432,7 @@ async function updateStageTime(user, id, stageKey, body) {
   const planned = validateStageDateTime(planned_end_date);
   if (!start.ok) return { status: 400, body: { error: start.error } };
   if (!planned.ok) return { status: 400, body: { error: planned.error } };
+  const lockedPlanned = FOLLOW_UP_STAGE_KEYS.includes(stageKey) || stageKey === 'material_in';
   if (start.value && planned.value && new Date(start.value) > new Date(planned.value)) {
     return { status: 400, body: { error: '开始时间不能晚于计划完成时间' } };
   }
@@ -407,6 +440,17 @@ async function updateStageTime(user, id, stageKey, body) {
   const stage = await db.prepare('SELECT * FROM process_stages WHERE order_id = ? AND stage_key = ?').get(id, stageKey);
   if (!stage) {
     return { status: 404, body: { error: '流程节点不存在' } };
+  }
+
+  if (lockedPlanned && planned.value) {
+    return {
+      status: 400,
+      body: {
+        error: stageKey === 'material_in'
+          ? '计划完成时间由各采购计划到货时间自动生成（取最晚），不能手动修改'
+          : '计划完成时间由对应采购的计划到货时间自动生成，不能手动修改'
+      }
+    };
   }
 
   // 如果时间已设置，仅管理员和总经理可修改
@@ -422,7 +466,29 @@ async function updateStageTime(user, id, stageKey, body) {
     WHERE order_id = ? AND stage_key = ?
   `).run(start.value ?? null, planned.value ?? null, id, stageKey);
 
+  // 采购计划到货时间变化时，自动同步采购跟进计划完成时间，并重算物料进仓计划完成时间
+  if (PURCHASE_TO_FOLLOW_UP[stageKey] && planned.value) {
+    await db.prepare(`
+      UPDATE process_stages SET planned_end_date = ?, updated_at = datetime('now', '+8 hours')
+      WHERE order_id = ? AND stage_key = ?
+    `).run(planned.value, id, PURCHASE_TO_FOLLOW_UP[stageKey]);
+    await syncMaterialInPlanned(db, id);
+  }
+
   return { status: 200, body: { message: '时间更新成功' } };
+}
+
+async function syncMaterialInPlanned(db, orderId) {
+  const placeholders = PURCHASE_STAGE_KEYS.map(() => '?').join(',');
+  const rows = await db.prepare(`
+    SELECT planned_end_date FROM process_stages WHERE order_id = ? AND stage_key IN (${placeholders})
+  `).all(orderId, ...PURCHASE_STAGE_KEYS);
+  const dates = rows.map(r => r.planned_end_date).filter(Boolean);
+  const maxDate = dates.length ? dates.reduce((a, b) => (a > b ? a : b)) : null;
+  await db.prepare(`
+    UPDATE process_stages SET planned_end_date = ?, updated_at = datetime('now', '+8 hours')
+    WHERE order_id = ? AND stage_key = 'material_in'
+  `).run(maxDate, orderId);
 }
 
 async function notifyReadyNextStages(db, order, id, stageKey, stageDef) {
