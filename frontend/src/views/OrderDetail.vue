@@ -92,7 +92,7 @@
               <template v-if="auth.canOperateStage(s)">
                 <button v-if="s.status === 'pending'" class="btn btn-success btn-sm" @click="updateStage(s, 'in_progress')">开始</button>
                 <button v-if="s.status === 'in_progress'" class="btn btn-primary btn-sm" @click="updateStage(s, 'completed')">完成</button>
-                <button v-if="s.stage_key !== 'material_in' && (!s.start_date || !s.planned_end_date || auth.isAdmin || auth.isManagement)" class="btn btn-outline btn-sm" aria-label="设置时间" @click="showTimeModal(s)">⏱</button>
+                <button v-if="s.stage_key !== 'material_in' && canSetTime(s)" class="btn btn-outline btn-sm" aria-label="设置时间" @click="showTimeModal(s)">⏱</button>
               </template>
               <span v-else-if="!auth.isUserDept(s.department_id)" style="font-size:11px;color:var(--text-secondary)">无权限</span>
             </div>
@@ -129,7 +129,7 @@
                   <template v-if="auth.canOperateStage(ps)">
                     <button v-if="ps.status === 'pending'" class="btn btn-success btn-sm" @click="updateStage(ps, 'in_progress')">开始</button>
                     <button v-if="ps.status === 'in_progress'" class="btn btn-primary btn-sm" @click="updateStage(ps, 'completed')">完成</button>
-                    <button v-if="!isFollowUpStage(ps) && ps.stage_key !== 'material_in' && (!ps.start_date || !ps.planned_end_date || auth.isAdmin || auth.isManagement)" class="btn btn-outline btn-sm" aria-label="设置时间" @click="showTimeModal(ps)">⏱</button>
+                    <button v-if="!isFollowUpStage(ps) && ps.stage_key !== 'material_in' && canSetTime(ps)" class="btn btn-outline btn-sm" aria-label="设置时间" @click="showTimeModal(ps)">⏱</button>
                   </template>
                   <span v-else-if="!auth.isUserDept(ps.department_id)" style="font-size:11px;color:var(--text-secondary)">无权限</span>
                 </div>
@@ -535,6 +535,13 @@ function showTimeModal(stage) {
     isPurchase: isPurchaseStage(stage),
     hideStart: stage.stage_key === 'delivery_payment'
   };
+}
+
+function canSetTime(stage) {
+  if (!stage) return false;
+  if (auth.isAdmin || auth.isManagement) return true;
+  if (stage.stage_key === 'delivery_payment') return !stage.planned_end_date;
+  return !stage.start_date || !stage.planned_end_date;
 }
 
 async function saveTime() {

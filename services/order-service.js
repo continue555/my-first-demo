@@ -476,7 +476,10 @@ async function updateStageTime(user, id, stageKey, body) {
   if (user.role !== 'admin' && user.role !== 'management' && !(await canOperateStage(user, stage))) {
     return { status: 403, body: { error: stage.department_id ? '您没有权限操作此流程节点' : '该节点无负责部门，请联系管理员' } };
   }
-  if (stage.start_date && stage.planned_end_date && user.role !== 'admin' && user.role !== 'management') {
+  const timeAlreadySet = NO_START_STAGE_KEYS.has(stageKey)
+    ? !!stage.planned_end_date
+    : !!stage.start_date && !!stage.planned_end_date;
+  if (timeAlreadySet && user.role !== 'admin' && user.role !== 'management') {
     return { status: 403, body: { error: '时间已设置，仅管理员和总经理可修改，请联系他们协助修改' } };
   }
 

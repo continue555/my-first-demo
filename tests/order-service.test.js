@@ -366,6 +366,37 @@ test('delivery_payment completion keeps start null', withNoopAudit(async () => {
   }
 }));
 
+test('delivery_payment planned date locked for non-admin after set', async () => {
+  const finance = { id: 11, name: '财务', role: 'finance', department_id: 3 };
+  const fake = recordingDb({
+    stageFor: key => ({ ...genericStage(key), department_id: 3, planned_end_date: '2026-08-10' })
+  });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStageTime(finance, 1, 'delivery_payment', { planned_end_date: '2026-08-12' });
+    assert.equal(r.status, 403);
+    assert.ok(r.body.error.includes('仅管理员和总经理可修改'));
+  } finally {
+    database.getDb = original;
+  }
+});
+
+test('delivery_payment planned date settable when empty', async () => {
+  const finance = { id: 11, name: '财务', role: 'finance', department_id: 3 };
+  const fake = recordingDb({
+    stageFor: key => ({ ...genericStage(key), department_id: 3, start_date: null, planned_end_date: null })
+  });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStageTime(finance, 1, 'delivery_payment', { planned_end_date: '2026-08-12' });
+    assert.equal(r.status, 200);
+  } finally {
+    database.getDb = original;
+  }
+});
+
 test('follow-up completion backfills purchase actual arrival', withNoopAudit(async () => {
   const fake = recordingDb({
     stageFor: genericStage,
