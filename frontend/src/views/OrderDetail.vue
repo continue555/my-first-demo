@@ -144,8 +144,8 @@
     <div v-if="timeModal.visible" class="modal-overlay" @click.self="timeModal.visible = false">
       <div class="modal">
         <h3>设置时间 - {{ timeModal.stageName }}</h3>
-        <div class="form-group"><label>{{ timeModal.isPurchase ? '下单时间' : '开始时间' }}</label><input v-model="timeModal.startDate" type="datetime-local"></div>
-        <div class="form-group"><label>{{ timeModal.isPurchase ? '计划到货时间' : '计划完成时间' }}</label><input v-model="timeModal.plannedEnd" type="datetime-local"></div>
+        <div class="form-group"><label>{{ timeModal.isPurchase ? '下单日期' : '开始日期' }}</label><input v-model="timeModal.startDate" type="date"></div>
+        <div class="form-group"><label>{{ timeModal.isPurchase ? '计划到货日期' : '计划完成日期' }}</label><input v-model="timeModal.plannedEnd" type="date"></div>
         <div class="modal-actions">
           <button class="btn btn-outline" @click="timeModal.visible = false">取消</button>
           <button class="btn btn-primary" @click="saveTime">保存</button>
