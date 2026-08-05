@@ -9,8 +9,8 @@
     "prod": "pm2 start ecosystem.config.js",
     "backup": "node backup.js",
     "test": "node test-api.js",
-    "test:unit": "node --test tests/overdue.test.js tests/sanitize.test.js tests/validation.test.js tests/stage-permissions.test.js tests/login-rate-limit.test.js tests/order-service.test.js tests/export-workbook.test.js tests/files-service.test.js",
-    "test:coverage": "node --test --experimental-test-coverage tests/overdue.test.js tests/sanitize.test.js tests/validation.test.js tests/stage-permissions.test.js tests/login-rate-limit.test.js tests/order-service.test.js tests/export-workbook.test.js tests/files-service.test.js",
+    "test:unit": "node --test tests/overdue.test.js tests/sanitize.test.js tests/validation.test.js tests/stage-permissions.test.js tests/login-rate-limit.test.js tests/order-service.test.js tests/export-workbook.test.js tests/files-service.test.js tests/auth-service.test.js",
+    "test:coverage": "node --test --experimental-test-coverage tests/overdue.test.js tests/sanitize.test.js tests/validation.test.js tests/stage-permissions.test.js tests/login-rate-limit.test.js tests/order-service.test.js tests/export-workbook.test.js tests/files-service.test.js tests/auth-service.test.js",
     "test:stress": "node test-stress.js",
     "build": "cd frontend && npm run build",
     "e2e": "node e2e/run-e2e.js"

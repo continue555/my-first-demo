@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { getDb, logAudit } = require('../database');
+const database = require('../database');
 const { createDownloadTicket } = require('../lib/download-ticket');
 const { canDeleteFile } = require('../lib/file-permissions');
 
@@ -54,7 +54,7 @@ function exceedsOrderFileQuota(currentTotal, addedBytes) {
 }
 
 async function listOrderFiles(orderId) {
-  const db = getDb();
+  const db = database.getDb();
   const files = await db.prepare(`
     SELECT f.*, u.name as uploader_name
     FROM order_files f
@@ -66,7 +66,7 @@ async function listOrderFiles(orderId) {
 }
 
 async function createPreviewTicket(fileId, userId) {
-  const db = getDb();
+  const db = database.getDb();
   const file = await db.prepare('SELECT * FROM order_files WHERE id = ?').get(fileId);
   if (!file) {
     return { status: 404, body: { error: '文件不存在' } };
@@ -81,7 +81,13 @@ async function saveUploadedFile({ orderId, user, file, stageKey }) {
     return { status: 400, body: { error: '文件内容与类型不匹配，请检查文件' } };
   }
 
-  const db = getDb();
+  const db = database.getDb();
+  const order = await db.prepare('SELECT id, order_no FROM orders WHERE id = ?').get(orderId);
+  if (!order) {
+    fs.unlinkSync(file.path);
+    return { status: 404, body: { error: '订单不存在' } };
+  }
+
   const totalRow = await db.prepare('SELECT COALESCE(SUM(file_size), 0) AS total FROM order_files WHERE order_id = ?').get(orderId);
   const currentTotal = Number(totalRow && totalRow.total) || 0;
   if (exceedsOrderFileQuota(currentTotal, file.size)) {
@@ -101,14 +107,13 @@ async function saveUploadedFile({ orderId, user, file, stageKey }) {
     throw e;
   }
 
-  const order = await db.prepare('SELECT order_no FROM orders WHERE id = ?').get(orderId);
-  await logAudit(user.id, user.name, '上传附件', 'order', parseInt(orderId), `订单: ${order?.order_no}, 文件: ${originalName}`);
+  await database.logAudit(user.id, user.name, '上传附件', 'order', parseInt(orderId), `订单: ${order.order_no}, 文件: ${originalName}`);
 
   return { status: 201, body: { message: '文件上传成功', filename: originalName } };
 }
 
 async function resolveFile(fileId) {
-  const db = getDb();
+  const db = database.getDb();
   const file = await db.prepare('SELECT * FROM order_files WHERE id = ?').get(fileId);
   if (!file) {
     return { status: 404, body: { error: '文件不存在' } };
@@ -123,7 +128,7 @@ async function resolveFile(fileId) {
 }
 
 async function deleteFile(user, id) {
-  const db = getDb();
+  const db = database.getDb();
   const file = await db.prepare('SELECT * FROM order_files WHERE id = ?').get(id);
   if (!file) {
     return { status: 404, body: { error: '文件不存在' } };
@@ -139,7 +144,7 @@ async function deleteFile(user, id) {
   await db.prepare('DELETE FROM order_files WHERE id = ?').run(id);
 
   const order = await db.prepare('SELECT order_no FROM orders WHERE id = ?').get(file.order_id);
-  await logAudit(user.id, user.name, '删除附件', 'order', file.order_id, `订单: ${order?.order_no}, 文件: ${file.original_name}`);
+  await database.logAudit(user.id, user.name, '删除附件', 'order', file.order_id, `订单: ${order?.order_no}, 文件: ${file.original_name}`);
 
   return { status: 200, body: { message: '文件已删除' } };
 }

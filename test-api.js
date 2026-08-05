@@ -288,6 +288,12 @@ async function main() {
     token = oldToken;
     return up.status === 403 ? {} : { error: "expected 403, got " + up.status };
   });
+  await test("Upload to missing order rejected", async () => {
+    const up = await uploadFile(999999, "missing-order.txt");
+    return up.status === 404 && up.body.error === "订单不存在"
+      ? {}
+      : { error: "expected 404, got " + up.status + " " + JSON.stringify(up.body) };
+  });
   await test("Non-admin cannot delete attachment", async () => {
     if (!testFileId) return { error: "no test file" };
     const oldToken = token;
@@ -442,6 +448,26 @@ async function main() {
   await test("Invalid user role rejected", async () => {
     const r = await req("POST", "/api/auth/register", { username: "badrole_" + Date.now(), password: "123456", name: "Bad", role: "superadmin", department_id: 1 });
     return r.status === 400 ? {} : { error: "expected 400, got " + r.status };
+  });
+  await test("Register rejects missing department", async () => {
+    const r = await req("POST", "/api/auth/register", { username: "baddept_" + Date.now(), password: "123456", name: "Bad", role: "sales", department_id: 999999 });
+    return r.status === 400 && r.body.error === "部门不存在"
+      ? {}
+      : { error: "expected 400, got " + r.status + " " + JSON.stringify(r.body) };
+  });
+  await test("Update user rejects missing department", async () => {
+    const username = "upduser_" + Date.now();
+    const create = await req("POST", "/api/auth/register", { username, password: "123456", name: "Upd", role: "sales", department_id: 1 });
+    if (create.status !== 201) return { error: "create failed: " + JSON.stringify(create.body) };
+    const users = await req("GET", "/api/auth/users");
+    const u = (users.body.users || []).find(x => x.username === username);
+    if (!u) return { error: "user not found" };
+    const r = await req("PUT", `/api/auth/users/${u.id}`, { department_id: 999999 });
+    const del = await req("DELETE", `/api/auth/users/${u.id}`);
+    if (del.status !== 200) return { error: "cleanup failed" };
+    return r.status === 400 && r.body.error === "部门不存在"
+      ? {}
+      : { error: "expected 400, got " + r.status + " " + JSON.stringify(r.body) };
   });
   await test("Stats restricted by role", async () => {
     const oldToken = token;

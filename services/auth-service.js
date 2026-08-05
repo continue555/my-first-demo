@@ -107,6 +107,11 @@ async function register(actor, body) {
   const exist = await db.prepare('SELECT id FROM users WHERE username = ?').get(cleanUsername);
   if (exist) return { status: 400, body: { error: '用户名已存在' } };
 
+  if (department_id != null) {
+    const dept = await db.prepare('SELECT id FROM departments WHERE id = ?').get(department_id);
+    if (!dept) return { status: 400, body: { error: '部门不存在' } };
+  }
+
   const hash = bcrypt.hashSync(password, 10);
   await db.prepare('INSERT INTO users (username, password, name, department_id, role) VALUES (?, ?, ?, ?, ?)')
     .run(cleanUsername, hash, cleanName, department_id || null, role);
@@ -138,6 +143,11 @@ async function updateUser(actor, id, body) {
   const db = getDb();
   const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(id);
   if (!user) return { status: 404, body: { error: '用户不存在' } };
+
+  if (department_id != null) {
+    const dept = await db.prepare('SELECT id FROM departments WHERE id = ?').get(department_id);
+    if (!dept) return { status: 400, body: { error: '部门不存在' } };
+  }
 
   await db.prepare('UPDATE users SET name = COALESCE(?, name), department_id = COALESCE(?, department_id), role = COALESCE(?, role) WHERE id = ?')
     .run(cleanName, department_id, role, id);
