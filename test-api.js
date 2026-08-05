@@ -136,7 +136,10 @@ async function main() {
     "cover_follow_up", "mold_design_follow_up", "material_in"
   ]);
   async function runStage(orderId, key) {
-    if (!autoTimeStages.has(key)) {
+    if (key === "delivery_payment") {
+      const timeRes = await req("PUT", `/api/orders/${orderId}/stages/${key}/time`, { planned_end_date: "2026-08-02T09:00" });
+      if (timeRes.status !== 200) throw new Error(`time ${key}: ${JSON.stringify(timeRes.body)}`);
+    } else if (!autoTimeStages.has(key)) {
       const timeRes = await req("PUT", `/api/orders/${orderId}/stages/${key}/time`, { start_date: "2026-08-01T09:00", planned_end_date: "2026-08-02T09:00" });
       if (timeRes.status !== 200) throw new Error(`time ${key}: ${JSON.stringify(timeRes.body)}`);
     }
@@ -147,7 +150,10 @@ async function main() {
   }
 
   async function runStageAs(orderId, key, username) {
-    if (!autoTimeStages.has(key)) {
+    if (key === "delivery_payment") {
+      const timeRes = await req("PUT", `/api/orders/${orderId}/stages/${key}/time`, { planned_end_date: "2026-08-02T09:00" });
+      if (timeRes.status !== 200) throw new Error(`time ${key}: ${JSON.stringify(timeRes.body)}`);
+    } else if (!autoTimeStages.has(key)) {
       const timeRes = await req("PUT", `/api/orders/${orderId}/stages/${key}/time`, { start_date: "2026-08-01T09:00", planned_end_date: "2026-08-02T09:00" });
       if (timeRes.status !== 200) throw new Error(`time ${key}: ${JSON.stringify(timeRes.body)}`);
     }

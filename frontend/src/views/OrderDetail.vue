@@ -79,7 +79,7 @@
             <div class="stage-info">
               <div class="stage-name">{{ s.stage_name }}<span v-if="getOverdueInfo(s)" :class="getOverdueInfo(s).stampClass">{{ getOverdueInfo(s).stampText }}</span></div>
               <div class="stage-dates">
-                <span v-if="s.start_date">开始: {{ fmtDate(s.start_date) }}</span>
+                <span v-if="s.start_date && s.stage_key !== 'delivery_payment'">开始: {{ fmtDate(s.start_date) }}</span>
                 <span v-if="s.planned_end_date"> | 计划完成: {{ fmtDate(s.planned_end_date) }}</span>
                 <span v-if="s.actual_end_date"> | <span :class="getOverdueInfo(s)?.cssClass">实际完成: {{ fmtDate(s.actual_end_date) }}</span></span>
                 <span v-if="s.operator_name"> | 操作人: {{ s.operator_name }}</span>
@@ -144,7 +144,7 @@
     <div v-if="timeModal.visible" class="modal-overlay" @click.self="timeModal.visible = false">
       <div class="modal">
         <h3>设置时间 - {{ timeModal.stageName }}</h3>
-        <div class="form-group"><label>{{ timeModal.isPurchase ? '下单日期' : '开始日期' }}</label><input v-model="timeModal.startDate" type="date"></div>
+        <div v-if="!timeModal.hideStart" class="form-group"><label>{{ timeModal.isPurchase ? '下单日期' : '开始日期' }}</label><input v-model="timeModal.startDate" type="date"></div>
         <div class="form-group">
           <label>{{ timeModal.isPurchase ? '计划到货日期' : '计划完成日期' }}</label>
           <input v-model="timeModal.plannedEnd" type="date">
@@ -513,10 +513,10 @@ function formatSize(bytes) {
 
 async function updateStage(stage, status) {
   // 点击"开始"时，检查是否已设置时间
-  const autoStage = isFollowUpStage(stage) || stage.stage_key === 'material_in';
+  const autoStage = isFollowUpStage(stage) || stage.stage_key === 'material_in' || stage.stage_key === 'delivery_payment';
   if (status === 'in_progress' && stage.status === 'pending' && (!stage.planned_end_date || (!autoStage && !stage.start_date))) {
-    toast.show(autoStage ? '计划完成时间未生成，请先确认采购计划到货时间' : '请先设置开始时间和计划完成时间', 'error');
-    if (!autoStage) showTimeModal(stage);
+    toast.show(autoStage ? '请先设置计划完成日期' : '请先设置开始时间和计划完成时间', 'error');
+    if (!autoStage || stage.stage_key === 'delivery_payment') showTimeModal(stage);
     return;
   }
   try {
@@ -532,7 +532,8 @@ function showTimeModal(stage) {
   timeModal.value = {
     visible: true, orderId: order.value.id, stageKey: stage.stage_key,
     stageName: stage.stage_name, startDate: stage.start_date || '', plannedEnd: stage.planned_end_date || '',
-    isPurchase: isPurchaseStage(stage)
+    isPurchase: isPurchaseStage(stage),
+    hideStart: stage.stage_key === 'delivery_payment'
   };
 }
 

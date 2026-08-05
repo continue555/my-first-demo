@@ -14,6 +14,11 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 const PURCHASE_STAGE_KEYS = ['purchase_frame', 'purchase_mold_frame', 'purchase_electrical', 'purchase_cover', 'mold_design_purchase'];
 const FOLLOW_UP_STAGE_KEYS = ['frame_follow_up', 'mold_frame_follow_up', 'electrical_follow_up', 'cover_follow_up', 'mold_design_follow_up'];
+const DELIVERY_PAYMENT_KEY = 'delivery_payment';
+// 无开始时间概念的节点：采购跟进、物料进仓、提货款到账
+const NO_START_STAGE_KEYS = new Set([...FOLLOW_UP_STAGE_KEYS, 'material_in', DELIVERY_PAYMENT_KEY]);
+// 时间完全由联动自动生成的节点：采购跟进、物料进仓
+const FULL_AUTO_STAGE_KEYS = new Set([...FOLLOW_UP_STAGE_KEYS, 'material_in']);
 const PURCHASE_TO_FOLLOW_UP = {
   purchase_frame: 'frame_follow_up',
   purchase_mold_frame: 'mold_frame_follow_up',
@@ -350,7 +355,7 @@ async function updateStage(user, id, stageKey, body) {
   }
 
   const now = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 16);
-  const autoStage = FOLLOW_UP_STAGE_KEYS.includes(stageKey) || stageKey === 'material_in';
+  const autoStage = NO_START_STAGE_KEYS.has(stageKey);
 
   // 如果改为进行中，检查前置依赖
   if (status === 'in_progress') {
@@ -444,7 +449,7 @@ async function updateStageTime(user, id, stageKey, body) {
   const planned = validateStageDateTime(planned_end_date);
   if (!start.ok) return { status: 400, body: { error: start.error } };
   if (!planned.ok) return { status: 400, body: { error: planned.error } };
-  const autoTimeStage = FOLLOW_UP_STAGE_KEYS.includes(stageKey) || stageKey === 'material_in';
+  const autoTimeStage = FULL_AUTO_STAGE_KEYS.has(stageKey);
   if (autoTimeStage && (start.value || planned.value)) {
     return {
       status: 400,
@@ -454,6 +459,9 @@ async function updateStageTime(user, id, stageKey, body) {
           : '采购跟进时间由对应采购计划到货自动生成，不能手动修改'
       }
     };
+  }
+  if (stageKey === DELIVERY_PAYMENT_KEY && start.value) {
+    return { status: 400, body: { error: '提货款到账不需要开始时间，请仅设置计划完成日期' } };
   }
   if (start.value && planned.value && new Date(start.value) > new Date(planned.value)) {
     return { status: 400, body: { error: '开始时间不能晚于计划完成时间' } };

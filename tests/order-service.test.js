@@ -333,6 +333,39 @@ test('material_in time settings are locked', async () => {
   }
 });
 
+test('delivery_payment rejects start date but accepts planned', async () => {
+  const fake = recordingDb({ stageFor: genericStage });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const rejected = await updateStageTime(admin, 1, 'delivery_payment', { start_date: '2026-08-05', planned_end_date: '2026-08-10' });
+    assert.equal(rejected.status, 400);
+    assert.ok(rejected.body.error.includes('不需要开始时间'));
+
+    const accepted = await updateStageTime(admin, 1, 'delivery_payment', { planned_end_date: '2026-08-10' });
+    assert.equal(accepted.status, 200);
+  } finally {
+    database.getDb = original;
+  }
+});
+
+test('delivery_payment completion keeps start null', withNoopAudit(async () => {
+  const fake = recordingDb({
+    stageFor: genericStage,
+    allStatuses: notAllDone
+  });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStage(admin, 1, 'delivery_payment', { status: 'completed' });
+    assert.equal(r.status, 200);
+    const stageUpdate = fake.runs.find(x => x.sql.includes('actual_end_date = ?') && x.params.includes('delivery_payment'));
+    assert.ok(stageUpdate && stageUpdate.params[1] === null);
+  } finally {
+    database.getDb = original;
+  }
+}));
+
 test('follow-up completion backfills purchase actual arrival', withNoopAudit(async () => {
   const fake = recordingDb({
     stageFor: genericStage,
