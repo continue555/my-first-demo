@@ -101,6 +101,16 @@ async function buildDocxBuffer() {
   return zip.generateAsync({ type: 'nodebuffer' });
 }
 
+async function getOrderId(page, orderNo) {
+  await page.goto(BASE + '/orders', { waitUntil: 'domcontentloaded', timeout: 45000 });
+  await page.waitForSelector('tbody tr', { timeout: 30000 });
+  await page.locator('tbody tr', { hasText: orderNo }).locator('button').first().click();
+  await page.waitForSelector('.detail-grid', { timeout: 30000 });
+  const id = new URL(page.url()).pathname.split('/').pop();
+  if (!/^\d+$/.test(id)) throw new Error('cannot resolve order id from url: ' + page.url());
+  return id;
+}
+
 (async () => {
   const browser = await chromium.launch();
 
@@ -109,7 +119,7 @@ async function buildDocxBuffer() {
   track(page);
   let createResp = null;
   page.on('response', r => {
-    if (r.url().includes('/api/orders') && r.request().method() === 'POST') {
+    if (r.url().split('?')[0].endsWith('/api/orders') && r.request().method() === 'POST') {
       r.text().then(t => { createResp = { status: r.status(), body: t }; }).catch(() => {});
     }
   });
@@ -176,10 +186,7 @@ async function buildDocxBuffer() {
   });
 
   await check('excel preview renders in browser', async () => {
-    const parsed = JSON.parse(createResp.body);
-    if (!parsed.orderId) throw new Error('no orderId from create');
-    await page.goto(BASE + '/orders/' + parsed.orderId, { waitUntil: 'domcontentloaded', timeout: 45000 });
-    await page.waitForSelector('.detail-grid', { timeout: 30000 });
+    const orderId = await getOrderId(page, orderNo);
     const buffer = Buffer.from(await buildXlsxBuffer());
     await page.locator('.card-title input[type=file]').setInputFiles({
       name: 'e2e.xlsx',
@@ -204,10 +211,7 @@ async function buildDocxBuffer() {
   });
 
   await check('word preview renders in browser', async () => {
-    const parsed = JSON.parse(createResp.body);
-    if (!parsed.orderId) throw new Error('no orderId from create');
-    await page.goto(BASE + '/orders/' + parsed.orderId, { waitUntil: 'domcontentloaded', timeout: 45000 });
-    await page.waitForSelector('.detail-grid', { timeout: 30000 });
+    const orderId = await getOrderId(page, orderNo);
     const buffer = Buffer.from(await buildDocxBuffer());
     await page.locator('.card-title input[type=file]').setInputFiles({
       name: 'e2e.docx',
@@ -232,9 +236,8 @@ async function buildDocxBuffer() {
   });
 
   await check('browser downloads single order export', async () => {
-    const parsed = JSON.parse(createResp.body);
-    if (!parsed.orderId) throw new Error('no orderId from create');
-    const url = BASE + '/api/export/order/' + parsed.orderId;
+    const orderId = await getOrderId(page, orderNo);
+    const url = BASE + '/api/export/order/' + orderId;
     const downloadPromise = page.waitForEvent('download');
     await page.evaluate(u => {
       const a = document.createElement('a');
