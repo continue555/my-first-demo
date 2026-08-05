@@ -1,6 +1,7 @@
 const { Client } = require('ssh2');
 const fs = require('fs');
 const path = require('path');
+const cp = require('child_process');
 
 const HOST = process.env.SSH_HOST || '42.194.139.7';
 const USER = process.env.SSH_USER || 'ubuntu';
@@ -55,7 +56,9 @@ conn.on('ready', () => {
 
     try {
       const root = process.cwd();
-      await run(`mkdir -p ${BASE}/releases && cd ${BASE} && tar --exclude=node_modules --exclude=uploads --exclude=releases --exclude=.env --exclude=.git --exclude=.npm-cache --exclude=server_output.log -cf releases/pre-upload-$(date +%Y%m%d%H%M%S).tar .`);
+      const stamp = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
+      const preUploadTar = `pre-upload-${stamp}.tar`;
+      await run(`mkdir -p ${BASE}/releases && cd ${BASE} && tar --exclude=node_modules --exclude=uploads --exclude=releases --exclude=.env --exclude=.git --exclude=.npm-cache --exclude=server_output.log -cf releases/${preUploadTar} .`);
       await uploadDir(path.join(root, 'public'), `${BASE}/public`);
       await uploadDir(path.join(root, 'frontend', 'src'), `${BASE}/frontend/src`);
       await uploadDir(path.join(root, 'migrations'), `${BASE}/migrations`);
@@ -139,6 +142,8 @@ conn.on('ready', () => {
         process.exit(1);
       }
 
+      cp.execFileSync(process.execPath, [path.join(root, 'scripts', 'check-deploy-manifest.js')], { stdio: 'inherit' });
+
       for (const [local, remote] of files) {
         await put(path.join(root, local), remote);
       }
@@ -146,7 +151,7 @@ conn.on('ready', () => {
       console.log('uploads done');
 
       const installFlag = process.env.DEPLOY_INSTALL ? ' --install' : '';
-      const deploy = await run(`cd ${BASE} && bash deploy/server-deploy.sh${installFlag}`);
+      const deploy = await run(`cd ${BASE} && PRE_UPLOAD_TAR=${preUploadTar} bash deploy/server-deploy.sh${installFlag}`);
       console.log('server-deploy code:', deploy.code);
       console.log(deploy.out);
       if (deploy.errOut.trim()) console.log('server-deploy stderr:', deploy.errOut.trim());

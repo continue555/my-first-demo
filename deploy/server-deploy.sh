@@ -38,7 +38,12 @@ done
 echo "[server-deploy] tests"
 if ! node test-api.js; then
   echo "[server-deploy] tests failed, rolling back"
-  tar -C "$BACKUP" -cf - . | tar -C "$BASE" -xf -
+  if [ -n "${PRE_UPLOAD_TAR:-}" ] && [ -f "$RELEASE_DIR/$PRE_UPLOAD_TAR" ]; then
+    echo "[server-deploy] restoring pre-upload snapshot $PRE_UPLOAD_TAR"
+    tar -C "$BASE" -xf "$RELEASE_DIR/$PRE_UPLOAD_TAR"
+  else
+    tar -C "$BACKUP" -cf - . | tar -C "$BASE" -xf -
+  fi
   pm2 restart blowing-machine
   exit 1
 fi
