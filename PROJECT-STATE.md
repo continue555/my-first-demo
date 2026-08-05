@@ -38,6 +38,7 @@
 - 运维：PM2 配置 systemd 开机自启（pm2-ubuntu + pm2 save），重启后自动恢复 blowing-machine
 - 部署：新增 CI 硬校验 `check-assets-in-sync`（前端构建后比对资源映射）与 `check-deploy-manifest`（上传清单覆盖检查）；`deploy-remote.js` 上传前本地预检缺失文件与失效映射目标
 - 测试：新增 service 层单元测试（登录限流、阶段推进/并发唯一冲突、单订单导出工作簿），E2E 覆盖附件上传/预览、用户管理、批量导出
+- 测试：E2E 增加浏览器真实下载导出文件（下载后解析内容）与 Excel/Word 在线预览渲染验证
 - 前端：接入 Vitest + @vue/test-utils（组件/工具测试 14 项）；移动端可点击元素改为原生按钮并补 `aria-label` 与键盘焦点；TypeScript 按用户确认维持现状
 - 移动端兼容：viewport-fit=cover + safe-area 适配、输入框 16px 防 iOS 自动缩放、100dvh 视口适配；E2E 增加 iPhone 13/iPhone SE/Pixel 7/微信 UA 移动端矩阵
 - 架构：auth/附件/导出业务已拆 service（`auth-service`、`files-service`、`export-service`），routes 全部为薄路由

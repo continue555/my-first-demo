@@ -1,4 +1,7 @@
 const { chromium, devices } = require('playwright');
+const fs = require('fs');
+const ExcelJS = require('exceljs');
+const JSZip = require('jszip');
 
 const BASE = process.env.E2E_BASE || 'http://127.0.0.1:3000';
 const results = [];
@@ -82,6 +85,22 @@ async function runMobileFlow(page, label) {
   if (count !== 5) throw new Error(label + ': expected 5 more items, got ' + count);
 }
 
+async function buildXlsxBuffer() {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Sheet1');
+  ws.getCell('A1').value = 'e2e-excel-cell';
+  ws.getCell('A2').value = '订单编号';
+  return wb.xlsx.writeBuffer();
+}
+
+async function buildDocxBuffer() {
+  const zip = new JSZip();
+  zip.file('[Content_Types].xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/word/document.xml" ContentType="application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"/></Types>');
+  zip.file('_rels/.rels', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="word/document.xml"/></Relationships>');
+  zip.file('word/document.xml', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:p><w:r><w:t>e2e-word-cell</w:t></w:r></w:p></w:body></w:document>');
+  return zip.generateAsync({ type: 'nodebuffer' });
+}
+
 (async () => {
   const browser = await chromium.launch();
 
@@ -154,6 +173,87 @@ async function runMobileFlow(page, label) {
     if (!previewText.includes('e2e attachment content')) throw new Error('preview content missing');
     await page.locator('.doc-preview-modal .image-preview-header button').click();
     await page.waitForSelector('.doc-preview-modal', { state: 'detached', timeout: 10000 }).catch(() => {});
+  });
+
+  await check('excel preview renders in browser', async () => {
+    const parsed = JSON.parse(createResp.body);
+    if (!parsed.orderId) throw new Error('no orderId from create');
+    await page.goto(BASE + '/orders/' + parsed.orderId, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.waitForSelector('.detail-grid', { timeout: 30000 });
+    const buffer = Buffer.from(await buildXlsxBuffer());
+    await page.locator('.card-title input[type=file]').setInputFiles({
+      name: 'e2e.xlsx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      buffer
+    });
+    await page.waitForSelector('.file-item', { timeout: 15000 });
+    const item = page.locator('.file-item', { hasText: 'e2e.xlsx' });
+    if ((await item.count()) === 0) throw new Error('excel file not listed');
+    await item.locator('button', { hasText: '预览' }).click();
+    await page.waitForSelector('.doc-preview-modal', { timeout: 15000 });
+    await page.waitForFunction(
+      () => {
+        const body = document.querySelector('.doc-preview-body');
+        return body && body.textContent.includes('e2e-excel-cell');
+      },
+      null,
+      { timeout: 20000 }
+    );
+    await page.locator('.doc-preview-modal .image-preview-header button').click();
+    await page.waitForSelector('.doc-preview-modal', { state: 'detached', timeout: 10000 }).catch(() => {});
+  });
+
+  await check('word preview renders in browser', async () => {
+    const parsed = JSON.parse(createResp.body);
+    if (!parsed.orderId) throw new Error('no orderId from create');
+    await page.goto(BASE + '/orders/' + parsed.orderId, { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.waitForSelector('.detail-grid', { timeout: 30000 });
+    const buffer = Buffer.from(await buildDocxBuffer());
+    await page.locator('.card-title input[type=file]').setInputFiles({
+      name: 'e2e.docx',
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      buffer
+    });
+    await page.waitForSelector('.file-item', { timeout: 15000 });
+    const item = page.locator('.file-item', { hasText: 'e2e.docx' });
+    if ((await item.count()) === 0) throw new Error('docx file not listed');
+    await item.locator('button', { hasText: '预览' }).click();
+    await page.waitForSelector('.doc-preview-modal .docx', { timeout: 30000 });
+    await page.waitForFunction(
+      () => {
+        const docx = document.querySelector('.doc-preview-modal .docx');
+        return docx && docx.textContent.includes('e2e-word-cell');
+      },
+      null,
+      { timeout: 30000 }
+    );
+    await page.locator('.doc-preview-modal .image-preview-header button').click();
+    await page.waitForSelector('.doc-preview-modal', { state: 'detached', timeout: 10000 }).catch(() => {});
+  });
+
+  await check('browser downloads single order export', async () => {
+    const parsed = JSON.parse(createResp.body);
+    if (!parsed.orderId) throw new Error('no orderId from create');
+    const url = BASE + '/api/export/order/' + parsed.orderId;
+    const downloadPromise = page.waitForEvent('download');
+    await page.evaluate(u => {
+      const a = document.createElement('a');
+      a.href = u;
+      a.download = '';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    }, url);
+    const download = await downloadPromise;
+    const filePath = await download.path();
+    if (!filePath) throw new Error('download has no file');
+    const buf = fs.readFileSync(filePath);
+    if (buf.length < 1000) throw new Error('export file too small: ' + buf.length);
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buf);
+    let text = '';
+    for (const ws of wb.worksheets) ws.eachRow(row => row.eachCell(cell => { text += ' ' + cell.text; }));
+    if (!text.includes(orderNo) || !text.includes('签订合同')) throw new Error('export content missing');
   });
 
   await check('create and delete user via UI', async () => {
