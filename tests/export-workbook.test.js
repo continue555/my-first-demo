@@ -40,5 +40,7 @@ test('single order workbook contains order, stages and attachments', async () =>
   assert.ok(text.includes('签订合同'));
   assert.ok(text.includes('财务确认定金'));
   assert.ok(text.includes('合同.pdf'));
+  assert.ok(!text.includes('客户甲'));
+  assert.ok(!text.includes('项目乙'));
   assert.ok(hasDownloadLink);
 });
