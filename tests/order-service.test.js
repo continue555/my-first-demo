@@ -307,7 +307,7 @@ test('purchase planned date syncs follow-up and material_in', async () => {
   }
 });
 
-test('follow-up planned date is locked', async () => {
+test('follow-up time settings are locked', async () => {
   const fake = recordingDb({ stageFor: genericStage });
   const original = database.getDb;
   database.getDb = () => fake;
@@ -320,7 +320,7 @@ test('follow-up planned date is locked', async () => {
   }
 });
 
-test('material_in planned date is locked', async () => {
+test('material_in time settings are locked', async () => {
   const fake = recordingDb({ stageFor: genericStage });
   const original = database.getDb;
   database.getDb = () => fake;
@@ -346,6 +346,43 @@ test('follow-up completion backfills purchase actual arrival', withNoopAudit(asy
     assert.equal(r.status, 200);
     const backfill = fake.runs.find(x => x.sql.includes('actual_end_date IS NULL'));
     assert.ok(backfill && backfill.params.includes('purchase_frame'));
+  } finally {
+    database.getDb = original;
+  }
+}));
+
+test('purchase completion syncs follow-up planned date', withNoopAudit(async () => {
+  const fake = recordingDb({
+    stageFor: key => ({
+      id: 10, stage_key: key, status: 'in_progress', department_id: 5,
+      start_date: '2026-08-01', planned_end_date: '2026-08-10'
+    }),
+    allStatuses: notAllDone
+  });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStage(admin, 1, 'purchase_frame', { status: 'completed' });
+    assert.equal(r.status, 200);
+    const sync = fake.runs.find(x => x.sql.includes('stage_key = ?') && x.params.includes('frame_follow_up'));
+    assert.ok(sync && sync.params[0] === '2026-08-10');
+  } finally {
+    database.getDb = original;
+  }
+}));
+
+test('follow-up completion does not set material_in start', withNoopAudit(async () => {
+  const fake = recordingDb({
+    stageFor: genericStage,
+    allStatuses: notAllDone,
+    depsStatuses: Array.from({ length: 5 }, () => ({ status: 'completed' }))
+  });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStage(admin, 1, 'frame_follow_up', { status: 'completed' });
+    assert.equal(r.status, 200);
+    assert.equal(fake.runs.some(x => x.sql.includes("stage_key = 'material_in'")), false);
   } finally {
     database.getDb = original;
   }

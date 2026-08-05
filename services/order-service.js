@@ -353,8 +353,12 @@ async function updateStage(user, id, stageKey, body) {
 
   // 如果改为进行中，检查前置依赖
   if (status === 'in_progress') {
-    if (stage.status === 'pending' && (!stage.start_date || !stage.planned_end_date)) {
-      return { status: 400, body: { error: '请先设置开始时间和计划完成时间' } };
+    const autoStage = FOLLOW_UP_STAGE_KEYS.includes(stageKey) || stageKey === 'material_in';
+    if (stage.status === 'pending' && (!stage.planned_end_date || (!autoStage && !stage.start_date))) {
+      return {
+        status: 400,
+        body: { error: autoStage ? '计划完成时间未生成，请先确认采购计划到货时间' : '请先设置开始时间和计划完成时间' }
+      };
     }
     const depCheck = await checkDependency(id, stageKey);
     if (!depCheck.ok) {
@@ -384,6 +388,14 @@ async function updateStage(user, id, stageKey, body) {
       UPDATE process_stages SET status = ?, start_date = COALESCE(start_date, ?), actual_end_date = ?, notes = COALESCE(?, notes), operator_id = ?, operator_name = ?, updated_at = datetime('now', '+8 hours')
       WHERE order_id = ? AND stage_key = ?
     `).run(status, now, actualEnd, notes ?? null, user.id, user.name, id, stageKey);
+
+    // 采购完成时，同步对应采购跟进的计划到货时间（跟进无开始时间概念）
+    if (PURCHASE_TO_FOLLOW_UP[stageKey]) {
+      await db.prepare(`
+        UPDATE process_stages SET planned_end_date = COALESCE(planned_end_date, ?), updated_at = datetime('now', '+8 hours')
+        WHERE order_id = ? AND stage_key = ?
+      `).run(stage.planned_end_date, id, PURCHASE_TO_FOLLOW_UP[stageKey]);
+    }
 
     // 采购跟进确认到货后，回填对应采购的实际到货时间（取更晚值）
     if (FOLLOW_UP_TO_PURCHASE[stageKey]) {
@@ -432,7 +444,17 @@ async function updateStageTime(user, id, stageKey, body) {
   const planned = validateStageDateTime(planned_end_date);
   if (!start.ok) return { status: 400, body: { error: start.error } };
   if (!planned.ok) return { status: 400, body: { error: planned.error } };
-  const lockedPlanned = FOLLOW_UP_STAGE_KEYS.includes(stageKey) || stageKey === 'material_in';
+  const autoTimeStage = FOLLOW_UP_STAGE_KEYS.includes(stageKey) || stageKey === 'material_in';
+  if (autoTimeStage && (start.value || planned.value)) {
+    return {
+      status: 400,
+      body: {
+        error: stageKey === 'material_in'
+          ? '物料进仓时间由各采购计划到货自动生成，不能手动修改'
+          : '采购跟进时间由对应采购计划到货自动生成，不能手动修改'
+      }
+    };
+  }
   if (start.value && planned.value && new Date(start.value) > new Date(planned.value)) {
     return { status: 400, body: { error: '开始时间不能晚于计划完成时间' } };
   }
@@ -440,17 +462,6 @@ async function updateStageTime(user, id, stageKey, body) {
   const stage = await db.prepare('SELECT * FROM process_stages WHERE order_id = ? AND stage_key = ?').get(id, stageKey);
   if (!stage) {
     return { status: 404, body: { error: '流程节点不存在' } };
-  }
-
-  if (lockedPlanned && planned.value) {
-    return {
-      status: 400,
-      body: {
-        error: stageKey === 'material_in'
-          ? '计划完成时间由各采购计划到货时间自动生成（取最晚），不能手动修改'
-          : '计划完成时间由对应采购的计划到货时间自动生成，不能手动修改'
-      }
-    };
   }
 
   // 如果时间已设置，仅管理员和总经理可修改

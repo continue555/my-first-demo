@@ -92,7 +92,7 @@
               <template v-if="auth.canOperateStage(s)">
                 <button v-if="s.status === 'pending'" class="btn btn-success btn-sm" @click="updateStage(s, 'in_progress')">开始</button>
                 <button v-if="s.status === 'in_progress'" class="btn btn-primary btn-sm" @click="updateStage(s, 'completed')">完成</button>
-                <button v-if="!s.start_date || !s.planned_end_date || auth.isAdmin || auth.isManagement" class="btn btn-outline btn-sm" aria-label="设置时间" @click="showTimeModal(s)">⏱</button>
+                <button v-if="s.stage_key !== 'material_in' && (!s.start_date || !s.planned_end_date || auth.isAdmin || auth.isManagement)" class="btn btn-outline btn-sm" aria-label="设置时间" @click="showTimeModal(s)">⏱</button>
               </template>
               <span v-else-if="!auth.isUserDept(s.department_id)" style="font-size:11px;color:var(--text-secondary)">无权限</span>
             </div>
@@ -129,7 +129,7 @@
                   <template v-if="auth.canOperateStage(ps)">
                     <button v-if="ps.status === 'pending'" class="btn btn-success btn-sm" @click="updateStage(ps, 'in_progress')">开始</button>
                     <button v-if="ps.status === 'in_progress'" class="btn btn-primary btn-sm" @click="updateStage(ps, 'completed')">完成</button>
-                    <button v-if="!ps.start_date || !ps.planned_end_date || auth.isAdmin || auth.isManagement" class="btn btn-outline btn-sm" aria-label="设置时间" @click="showTimeModal(ps)">⏱</button>
+                    <button v-if="!isFollowUpStage(ps) && (!ps.start_date || !ps.planned_end_date || auth.isAdmin || auth.isManagement)" class="btn btn-outline btn-sm" aria-label="设置时间" @click="showTimeModal(ps)">⏱</button>
                   </template>
                   <span v-else-if="!auth.isUserDept(ps.department_id)" style="font-size:11px;color:var(--text-secondary)">无权限</span>
                 </div>
@@ -147,8 +147,7 @@
         <div class="form-group"><label>{{ timeModal.isPurchase ? '下单日期' : '开始日期' }}</label><input v-model="timeModal.startDate" type="date"></div>
         <div class="form-group">
           <label>{{ timeModal.isPurchase ? '计划到货日期' : '计划完成日期' }}</label>
-          <input v-model="timeModal.plannedEnd" type="date" :disabled="timeModal.plannedLocked">
-          <div v-if="timeModal.plannedLocked" class="time-lock-hint">由采购计划到货自动生成，无需手动填写</div>
+          <input v-model="timeModal.plannedEnd" type="date">
         </div>
         <div class="modal-actions">
           <button class="btn btn-outline" @click="timeModal.visible = false">取消</button>
@@ -532,8 +531,7 @@ function showTimeModal(stage) {
   timeModal.value = {
     visible: true, orderId: order.value.id, stageKey: stage.stage_key,
     stageName: stage.stage_name, startDate: stage.start_date || '', plannedEnd: stage.planned_end_date || '',
-    isPurchase: isPurchaseStage(stage),
-    plannedLocked: isFollowUpStage(stage) || stage.stage_key === 'material_in'
+    isPurchase: isPurchaseStage(stage)
   };
 }
 
@@ -691,11 +689,6 @@ onUnmounted(() => {
   font-size: 14px;
   font-weight: 600;
   margin-bottom: 10px;
-}
-.time-lock-hint {
-  margin-top: 6px;
-  font-size: 12px;
-  color: var(--text-secondary);
 }
 .doc-preview-modal {
   background: #fff;

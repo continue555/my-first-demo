@@ -131,9 +131,15 @@ async function main() {
   await test("Stats has overdue and no cancelled", async () => { const r = await req("GET", "/api/orders/stats"); return !("cancelled" in r.body.stats) && typeof r.body.stats.overdue === "number" ? {} : { error: "stats mismatch" }; });
   await test("Orders list", async () => { const r = await req("GET", "/api/orders?limit=3"); return r.body.orders ? {} : { error: "no orders" }; });
   const customNo = "TEST-" + Date.now();
+  const autoTimeStages = new Set([
+    "frame_follow_up", "mold_frame_follow_up", "electrical_follow_up",
+    "cover_follow_up", "mold_design_follow_up", "material_in"
+  ]);
   async function runStage(orderId, key) {
-    const timeRes = await req("PUT", `/api/orders/${orderId}/stages/${key}/time`, { start_date: "2026-08-01T09:00", planned_end_date: "2026-08-02T09:00" });
-    if (timeRes.status !== 200) throw new Error(`time ${key}: ${JSON.stringify(timeRes.body)}`);
+    if (!autoTimeStages.has(key)) {
+      const timeRes = await req("PUT", `/api/orders/${orderId}/stages/${key}/time`, { start_date: "2026-08-01T09:00", planned_end_date: "2026-08-02T09:00" });
+      if (timeRes.status !== 200) throw new Error(`time ${key}: ${JSON.stringify(timeRes.body)}`);
+    }
     const startRes = await req("PUT", `/api/orders/${orderId}/stages/${key}`, { status: "in_progress" });
     if (startRes.status !== 200) throw new Error(`start ${key}: ${JSON.stringify(startRes.body)}`);
     const doneRes = await req("PUT", `/api/orders/${orderId}/stages/${key}`, { status: "completed" });
@@ -141,8 +147,10 @@ async function main() {
   }
 
   async function runStageAs(orderId, key, username) {
-    const timeRes = await req("PUT", `/api/orders/${orderId}/stages/${key}/time`, { start_date: "2026-08-01T09:00", planned_end_date: "2026-08-02T09:00" });
-    if (timeRes.status !== 200) throw new Error(`time ${key}: ${JSON.stringify(timeRes.body)}`);
+    if (!autoTimeStages.has(key)) {
+      const timeRes = await req("PUT", `/api/orders/${orderId}/stages/${key}/time`, { start_date: "2026-08-01T09:00", planned_end_date: "2026-08-02T09:00" });
+      if (timeRes.status !== 200) throw new Error(`time ${key}: ${JSON.stringify(timeRes.body)}`);
+    }
     const oldToken = token;
     const login = await loginUser(username, "123456");
     if (!login.body.user || login.body.user.username !== username) {
