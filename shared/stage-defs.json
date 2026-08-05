@@ -19,6 +19,6 @@
   { "key": "material_in", "name": "物料进仓", "order": 18, "deptId": 6, "dependsOn": "frame_follow_up,mold_frame_follow_up,electrical_follow_up,cover_follow_up,mold_design_follow_up", "parentKey": "production" },
   { "key": "warehouse_prepare", "name": "仓库配料", "order": 19, "deptId": 6, "dependsOn": "material_in", "parentKey": "production" },
   { "key": "assembly", "name": "装配", "order": 20, "deptId": 7, "dependsOn": "warehouse_prepare", "parentKey": "production" },
-  { "key": "debug", "name": "调试验货", "order": 21, "deptId": 8, "dependsOn": "assembly", "parentKey": "production" },
+  { "key": "debug", "name": "调试验收", "order": 21, "deptId": 8, "dependsOn": "assembly", "parentKey": "production" },
   { "key": "shipping", "name": "发货", "order": 22, "deptId": 9, "dependsOn": "debug", "parentKey": null }
 ]
