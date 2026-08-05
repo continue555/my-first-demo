@@ -18,7 +18,16 @@ let exportJobSeq = 1;
 const JOBS_FILE = path.join(EXPORT_JOB_DIR, 'jobs.json');
 
 function saveExportJobs() {
-  fs.writeFileSync(JOBS_FILE, JSON.stringify([...exportJobs.values()], null, 2));
+  try {
+    fs.writeFileSync(JOBS_FILE, JSON.stringify([...exportJobs.values()], null, 2));
+  } catch (e) {
+    console.error(JSON.stringify({
+      ts: new Date().toISOString(),
+      level: 'error',
+      message: '导出任务状态落盘失败',
+      error: e.message
+    }));
+  }
 }
 
 async function fetchOrdersByIds(ids) {

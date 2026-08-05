@@ -22,12 +22,23 @@ function handleUnauthorized() {
 }
 
 export async function request(url, options = {}) {
-  const headers = { 'Content-Type': 'application/json', ...options.headers };
+  const { timeout = 30000, ...rest } = options;
+  const headers = { 'Content-Type': 'application/json', ...rest.headers };
   const token = getToken();
   if (token) headers['Authorization'] = `Bearer ${token}`;
   const csrf = getCsrfToken();
   if (csrf) headers['X-CSRF-Token'] = csrf;
-  const res = await fetch(`${BASE}${url}`, { ...options, headers });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+  let res;
+  try {
+    res = await fetch(`${BASE}${url}`, { ...rest, headers, signal: controller.signal });
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error('请求超时，请重试');
+    throw e;
+  } finally {
+    clearTimeout(timer);
+  }
   const data = await res.json();
   if (!res.ok) {
     if (res.status === 401) handleUnauthorized();
@@ -48,7 +59,17 @@ export const api = {
     if (token) headers['Authorization'] = `Bearer ${token}`;
     const csrf = getCsrfToken();
     if (csrf) headers['X-CSRF-Token'] = csrf;
-    const res = await fetch(`${BASE}${url}`, { headers });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 60000);
+    let res;
+    try {
+      res = await fetch(`${BASE}${url}`, { headers, signal: controller.signal });
+    } catch (e) {
+      if (e.name === 'AbortError') throw new Error('下载超时，请重试');
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
     if (res.status === 401) handleUnauthorized();
     if (!res.ok) throw new Error('下载失败');
     const blob = await res.blob();
