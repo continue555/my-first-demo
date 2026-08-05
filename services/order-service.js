@@ -364,9 +364,14 @@ async function updateStage(user, id, stageKey, body) {
   // 如果改为进行中，检查前置依赖
   if (status === 'in_progress') {
     if (stage.status === 'pending' && (!stage.planned_end_date || (!autoStage && !stage.start_date))) {
+      const error = stageKey === DELIVERY_PAYMENT_KEY
+        ? '请先设置计划完成日期'
+        : autoStage
+          ? '计划完成时间未生成，请先确认采购计划到货时间'
+          : '请先设置开始时间和计划完成时间';
       return {
         status: 400,
-        body: { error: autoStage ? '计划完成时间未生成，请先确认采购计划到货时间' : '请先设置开始时间和计划完成时间' }
+        body: { error }
       };
     }
     const depCheck = await checkDependency(id, stageKey);

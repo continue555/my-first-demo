@@ -381,6 +381,38 @@ test('delivery_payment rejects start date but accepts planned', async () => {
   }
 });
 
+test('delivery_payment requires planned date before start', async () => {
+  const original = database.getDb;
+  database.getDb = () => fakeDb({
+    get: sql => (sql.includes('FROM orders')
+      ? orderRow
+      : { id: 10, department_id: 3, stage_key: 'delivery_payment', status: 'pending', start_date: null, planned_end_date: null })
+  });
+  try {
+    const r = await updateStage(admin, 1, 'delivery_payment', { status: 'in_progress' });
+    assert.equal(r.status, 400);
+    assert.equal(r.body.error, '请先设置计划完成日期');
+  } finally {
+    database.getDb = original;
+  }
+});
+
+test('follow-up keeps procurement message when planned date missing', async () => {
+  const original = database.getDb;
+  database.getDb = () => fakeDb({
+    get: sql => (sql.includes('FROM orders')
+      ? orderRow
+      : { id: 10, department_id: 12, stage_key: 'frame_follow_up', status: 'pending', start_date: null, planned_end_date: null })
+  });
+  try {
+    const r = await updateStage(admin, 1, 'frame_follow_up', { status: 'in_progress' });
+    assert.equal(r.status, 400);
+    assert.equal(r.body.error, '计划完成时间未生成，请先确认采购计划到货时间');
+  } finally {
+    database.getDb = original;
+  }
+});
+
 test('delivery_payment completion keeps start null', withNoopAudit(async () => {
   const fake = recordingDb({
     stageFor: genericStage,
