@@ -171,7 +171,7 @@ async function main() {
   await test("Planned delivery date required", async () => { const r = await req("POST", "/api/orders", { customer_name: "Test", project_name: "Test" }); return r.status === 400 ? {} : { error: "expected 400, got " + r.status }; });
   await test("Invalid quantity rejected", async () => { const r = await req("POST", "/api/orders", { customer_name: "Test", project_name: "Test", quantity: -1, planned_delivery_date: "2026-08-10" }); return r.status === 400 ? {} : { error: "expected 400, got " + r.status }; });
   await test("Stage start without time rejected", async () => { const r = await req("PUT", `/api/orders/${createdOrderId}/stages/contract_sign`, { status: "in_progress" }); return r.status === 400 ? {} : { error: "expected 400, got " + r.status }; });
-  await test("Order detail (22 stages)", async () => { const r = await req("GET", `/api/orders/${createdOrderId}`); return r.body.stages && r.body.stages.length === 22 ? {} : { error: "expected 22 stages" }; });
+  await test("Order detail (23 stages)", async () => { const r = await req("GET", `/api/orders/${createdOrderId}`); return r.body.stages && r.body.stages.length === 23 ? {} : { error: "expected 23 stages" }; });
   await test("Debug stage renamed to 调试验收", async () => {
     const r = await req("GET", `/api/orders/${createdOrderId}`);
     const stage = (r.body.stages || []).find(s => s.stage_key === "debug");
@@ -179,7 +179,7 @@ async function main() {
   });
   await test("Stage start", async () => { await req("PUT", `/api/orders/${createdOrderId}/stages/contract_sign/time`, { start_date: "2026-08-01T09:00", planned_end_date: "2026-08-02T09:00" }); const r = await req("PUT", `/api/orders/${createdOrderId}/stages/contract_sign`, { status: "in_progress" }); return r.body.message ? {} : { error: "start failed" }; });
   await test("Stage complete", async () => { const r = await req("PUT", `/api/orders/${createdOrderId}/stages/contract_sign`, { status: "completed" }); return r.body.message ? {} : { error: "complete failed" }; });
-  await test("Full flow all 22 stages", async () => {
+  await test("Full flow all 23 stages", async () => {
     const detail = await req("GET", `/api/orders/${createdOrderId}`);
     const statusMap = {};
     for (const s of detail.body.stages || []) statusMap[s.stage_key] = s.status;
@@ -220,6 +220,7 @@ async function main() {
       warehouse_prepare: "cangku1",
       assembly: "zhuangpei1",
       debug: "tiaoshi1",
+      delivery_payment: "caiwu1",
       shipping: "fahuo1"
     };
     try {
