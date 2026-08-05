@@ -115,7 +115,7 @@
                       <span v-if="ps.actual_end_date"> | <span :class="getOverdueInfo(ps)?.cssClass">完成时间: {{ fmtDate(ps.actual_end_date) }}</span></span>
                     </template>
                     <template v-else>
-                      <span v-if="ps.start_date">开始: {{ fmtDate(ps.start_date) }}</span>
+                      <span v-if="ps.start_date && !isFollowUpStage(ps) && ps.stage_key !== 'material_in'">开始: {{ fmtDate(ps.start_date) }}</span>
                       <span v-if="ps.planned_end_date"> | 计划完成: {{ fmtDate(ps.planned_end_date) }}</span>
                       <span v-if="ps.actual_end_date"> | <span :class="getOverdueInfo(ps)?.cssClass">{{ isFollowUpStage(ps) ? '实际到货时间: ' + fmtDate(ps.actual_end_date) : '实际完成: ' + fmtDate(ps.actual_end_date) }}</span></span>
                     </template>

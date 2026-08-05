@@ -346,6 +346,8 @@ test('follow-up completion backfills purchase actual arrival', withNoopAudit(asy
     assert.equal(r.status, 200);
     const backfill = fake.runs.find(x => x.sql.includes('actual_end_date IS NULL'));
     assert.ok(backfill && backfill.params.includes('purchase_frame'));
+    const stageUpdate = fake.runs.find(x => x.sql.includes('actual_end_date = ?') && x.params.includes('frame_follow_up'));
+    assert.ok(stageUpdate && stageUpdate.params[1] === null);
   } finally {
     database.getDb = original;
   }

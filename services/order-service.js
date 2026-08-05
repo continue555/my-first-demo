@@ -350,10 +350,10 @@ async function updateStage(user, id, stageKey, body) {
   }
 
   const now = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 16);
+  const autoStage = FOLLOW_UP_STAGE_KEYS.includes(stageKey) || stageKey === 'material_in';
 
   // 如果改为进行中，检查前置依赖
   if (status === 'in_progress') {
-    const autoStage = FOLLOW_UP_STAGE_KEYS.includes(stageKey) || stageKey === 'material_in';
     if (stage.status === 'pending' && (!stage.planned_end_date || (!autoStage && !stage.start_date))) {
       return {
         status: 400,
@@ -368,7 +368,7 @@ async function updateStage(user, id, stageKey, body) {
     await db.prepare(`
       UPDATE process_stages SET status = ?, start_date = COALESCE(start_date, ?), notes = COALESCE(?, notes), operator_id = ?, operator_name = ?, updated_at = datetime('now', '+8 hours')
       WHERE order_id = ? AND stage_key = ?
-    `).run(status, now, notes ?? null, user.id, user.name, id, stageKey);
+    `).run(status, autoStage ? null : now, notes ?? null, user.id, user.name, id, stageKey);
 
     // 更新订单状态为进行中
     if (order.status === 'pending') {
@@ -387,7 +387,7 @@ async function updateStage(user, id, stageKey, body) {
     await db.prepare(`
       UPDATE process_stages SET status = ?, start_date = COALESCE(start_date, ?), actual_end_date = ?, notes = COALESCE(?, notes), operator_id = ?, operator_name = ?, updated_at = datetime('now', '+8 hours')
       WHERE order_id = ? AND stage_key = ?
-    `).run(status, now, actualEnd, notes ?? null, user.id, user.name, id, stageKey);
+    `).run(status, autoStage ? null : now, actualEnd, notes ?? null, user.id, user.name, id, stageKey);
 
     // 采购完成时，同步对应采购跟进的计划到货时间（跟进无开始时间概念）
     if (PURCHASE_TO_FOLLOW_UP[stageKey]) {
