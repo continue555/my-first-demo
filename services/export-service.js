@@ -295,14 +295,11 @@ function applyCellStyle(cell, color) {
 function applyOrderRow(ws, rowIdx, order, headers, files) {
   const row = ws.getRow(rowIdx);
   row.getCell(1).value = order.order_no;
-  row.getCell(2).value = order.product_model || '';
-  row.getCell(3).value = order.quantity;
-  row.getCell(4).value = order.contract_amount || '';
-  row.getCell(5).value = order.planned_delivery_date || '';
-  row.getCell(6).value = order.actual_delivery_date || '';
-  row.getCell(7).value = getStatusText(order.status);
-  row.getCell(8).value = order.creator_name || '';
-  row.getCell(9).value = order.created_at;
+  row.getCell(2).value = order.planned_delivery_date || '';
+  row.getCell(3).value = order.actual_delivery_date || '';
+  row.getCell(4).value = getStatusText(order.status);
+  row.getCell(5).value = order.creator_name || '';
+  row.getCell(6).value = order.created_at;
   for (let i = 1; i <= headers.length; i++) row.getCell(i).alignment = { horizontal: 'left' };
   if (files.length > 0) row.getCell(headers.length + 8).value = '附件: ' + files.length + ' 个';
 
@@ -329,7 +326,8 @@ function applyStageRow(ws, rowIdx, stage, headers) {
 
 function applySheetWidths(ws, headers) {
   for (let i = 1; i <= headers.length + 7; i++) ws.getColumn(i).width = 15;
-  ws.getColumn(4).width = 22;
+  ws.getColumn(2).width = 20;
+  ws.getColumn(3).width = 20;
 }
 
 async function buildOrdersWorkbook(orders, sheetName, downloadBase, userId) {
@@ -338,7 +336,7 @@ async function buildOrdersWorkbook(orders, sheetName, downloadBase, userId) {
   const ws = wb.addWorksheet(sheetName);
 
   let rowIdx = 1;
-  const headers = ['订单编号', '产品型号', '数量', '合同金额', '计划交货日期', '实际交货日期', '订单状态', '创建人', '创建时间'];
+  const headers = ['订单编号', '计划交货日期', '实际交货日期', '订单状态', '创建人', '创建时间'];
   const stageHeaders = ['阶段名称', '状态', '开始时间', '计划完成时间', '实际完成时间', '是否如期完成', '操作人'];
 
   const hdrRow = ws.getRow(rowIdx);
@@ -405,7 +403,7 @@ async function buildSingleOrderWorkbook(order, stages, files, downloadBase, user
 
   // Sheet 1: 订单概要
   const ws1 = wb.addWorksheet('订单概要');
-  const sumHdrs = ['订单编号', '产品型号', '数量', '合同金额', '计划交货日期', '实际交货日期', '订单状态', '创建人', '创建时间', '备注'];
+  const sumHdrs = ['订单编号', '计划交货日期', '实际交货日期', '订单状态', '创建人', '创建时间', '备注'];
   const hdr1 = ws1.getRow(1);
   sumHdrs.forEach((h, i) => {
     const cell = hdr1.getCell(i + 1);
@@ -414,15 +412,12 @@ async function buildSingleOrderWorkbook(order, stages, files, downloadBase, user
   });
   const row1 = ws1.getRow(2);
   row1.getCell(1).value = order.order_no;
-  row1.getCell(2).value = order.product_model || '';
-  row1.getCell(3).value = order.quantity;
-  row1.getCell(4).value = order.contract_amount || '';
-  row1.getCell(5).value = order.planned_delivery_date || '';
-  row1.getCell(6).value = order.actual_delivery_date || '';
-  row1.getCell(7).value = getStatusText(order.status);
-  row1.getCell(8).value = order.creator_name || '';
-  row1.getCell(9).value = order.created_at;
-  row1.getCell(10).value = order.notes || '';
+  row1.getCell(2).value = order.planned_delivery_date || '';
+  row1.getCell(3).value = order.actual_delivery_date || '';
+  row1.getCell(4).value = getStatusText(order.status);
+  row1.getCell(5).value = order.creator_name || '';
+  row1.getCell(6).value = order.created_at;
+  row1.getCell(7).value = order.notes || '';
   for (let i = 1; i <= sumHdrs.length; i++) row1.getCell(i).alignment = { horizontal: 'left' };
   const oc = getOrderOverdueColor(order);
   if (oc) for (let i = 1; i <= sumHdrs.length; i++) applyCellStyle(row1.getCell(i), oc);
