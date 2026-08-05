@@ -86,7 +86,8 @@ async function checkOverdue() {
   const newNotifs = [];
   for (const stage of overdueStages) {
     const sourceKey = `stage_overdue:${stage.id}`;
-    const msg = `订单 ${stage.order_no} 的"${stage.stage_name}"已超期（计划 ${stage.planned_end_date}），请尽快处理！`;
+    const planned = String(stage.planned_end_date || '').slice(0, 10);
+    const msg = `订单 ${stage.order_no} 的"${stage.stage_name}"已超期（计划 ${planned}），请尽快处理！`;
     const result = await db.prepare(`
       INSERT INTO notifications (order_id, message, recipient_dept_id, source_key)
       VALUES (?, ?, ?, ?)

@@ -49,5 +49,10 @@ test('single order workbook contains order, stages and attachments', async () =>
   assert.ok(!text.includes('合同金额'));
   assert.ok(!text.includes('CM-01'));
   assert.ok(!text.includes('100000'));
+
+  const stageSheet = parsed.worksheets.find(w => w.name === '流程明细');
+  let stageText = '';
+  stageSheet.eachRow(row => row.eachCell(cell => { stageText += ' ' + cell.text; }));
+  assert.ok(!stageText.includes('T09:00'));
   assert.ok(hasDownloadLink);
 });

@@ -176,6 +176,10 @@ function fmtSize(bytes) {
   return (bytes / 1048576).toFixed(1) + ' MB';
 }
 
+function fmtDate(v) {
+  return v ? String(v).slice(0, 10) : '';
+}
+
 function getImageType(mime) {
   if (!mime) return null;
   if (mime.includes('png')) return 'png';
@@ -322,9 +326,9 @@ function applyStageRow(ws, rowIdx, stage, headers) {
   const sRow = ws.getRow(rowIdx);
   sRow.getCell(base).value = stage.stage_name;
   sRow.getCell(base + 1).value = getStatusText(stage.status);
-  sRow.getCell(base + 2).value = stage.start_date || '';
-  sRow.getCell(base + 3).value = stage.planned_end_date || '';
-  sRow.getCell(base + 4).value = stage.actual_end_date || '';
+  sRow.getCell(base + 2).value = fmtDate(stage.start_date);
+  sRow.getCell(base + 3).value = fmtDate(stage.planned_end_date);
+  sRow.getCell(base + 4).value = fmtDate(stage.actual_end_date);
   sRow.getCell(base + 5).value = getStatusLabel(color);
   sRow.getCell(base + 6).value = stage.operator_name || '';
   for (let i = 0; i < 7; i++) {
@@ -448,9 +452,9 @@ async function buildSingleOrderWorkbook(order, stages, files, downloadBase, user
     row.getCell(1).value = s.stage_order;
     row.getCell(2).value = s.stage_name;
     row.getCell(3).value = getStatusText(s.status);
-    row.getCell(4).value = s.start_date || '';
-    row.getCell(5).value = s.planned_end_date || '';
-    row.getCell(6).value = s.actual_end_date || '';
+    row.getCell(4).value = fmtDate(s.start_date);
+    row.getCell(5).value = fmtDate(s.planned_end_date);
+    row.getCell(6).value = fmtDate(s.actual_end_date);
     row.getCell(7).value = getStatusLabel(color);
     row.getCell(8).value = s.operator_name || '';
     row.getCell(9).value = s.notes || '';
