@@ -122,6 +122,7 @@ async function deleteUser(actor, id) {
   if (!user) return { status: 404, body: { error: '用户不存在' } };
 
   await db.prepare('UPDATE orders SET created_by = NULL WHERE created_by = ?').run(id);
+  await db.prepare('UPDATE order_files SET uploaded_by = NULL WHERE uploaded_by = ?').run(id);
   await db.prepare('DELETE FROM users WHERE id = ?').run(id);
   await logAudit(actor.id, actor.name, '删除用户', 'user', parseInt(id), `用户名: ${user.username}`);
   return { status: 200, body: { message: '用户已删除' } };

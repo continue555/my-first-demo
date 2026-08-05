@@ -386,8 +386,24 @@ async function main() {
     const users = await req("GET", "/api/auth/users");
     const u = (users.body.users || []).find(x => x.username === username);
     if (!u) return { error: "user not found" };
+
+    const oldToken = token;
+    const targetLogin = await loginUser(username, "123456");
+    if (!targetLogin.body.user) return { error: "test user login failed" };
+    const up = await uploadFile(createdOrderId, "user-delete.txt");
+    token = oldToken;
+    if (up.status !== 201) return { error: "upload as test user failed" };
+
     const del = await req("DELETE", `/api/auth/users/${u.id}`);
-    return del.status === 200 ? {} : { error: "delete failed" };
+    if (del.status !== 200) return { error: "delete failed" };
+
+    const files = await req("GET", `/api/orders/${createdOrderId}/files`);
+    const uploaded = (files.body.files || []).find(f => f.original_name === "user-delete.txt");
+    if (!uploaded) return { error: "uploaded file missing after user delete" };
+    if (uploaded.uploaded_by !== null || uploaded.uploader_name !== null) {
+      return { error: "uploaded_by not cleaned after user delete" };
+    }
+    return {};
   });
   await test("Audit log", async () => { const r = await req("GET", "/api/audit"); return r.body.logs ? {} : { error: "no logs" }; });
   await test("Audit filter by order", async () => { const r = await req("GET", `/api/audit?order_id=${createdOrderId}`); return r.body.logs ? {} : { error: "audit filter failed" }; });

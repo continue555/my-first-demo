@@ -1,12 +1,12 @@
 # 项目状态快照
 
-> 用途：供长时间会话压缩后快速恢复上下文。更新日期：2026-08-03。
+> 用途：供长时间会话压缩后快速恢复上下文。更新日期：2026-08-05。
 
 ## 当前状态
 
-- 生产：http://42.194.139.7，PM2 `blowing-machine`，线上 API 测试 50/50 通过
+- 生产：http://42.194.139.7，PM2 `blowing-machine`，线上 API 测试 58/58 通过
 - 技术栈：Node.js + Express + PostgreSQL、Vue 3 + Vite 7、Pinia、ExcelJS、zod、docx-preview、read-excel-file
-- GitHub：continue555/my-first-demo，master 分支，CI 六任务全绿
+- GitHub：continue555/my-first-demo，master 分支，CI 七任务全绿
 - 部署：`deploy-remote.js` 上传 → 服务器 `deploy/server-deploy.sh` 备份/构建/重启/测试/自动回滚
 - 定时任务已装：每日备份、每 5 分钟健康检查、每周恢复演练
 
@@ -18,8 +18,9 @@
 - 部署：`$env:SSH_PASS=...; node deploy-remote.js`（首次/依赖变更加 `$env:DEPLOY_INSTALL='1'`）
 - 服务器端：`bash deploy/server-deploy.sh`、`bash deploy/rollback.sh <时间戳>`、`bash scripts/restore-drill.sh`、`bash scripts/health-check.sh`、`bash scripts/log-query.sh <关键字>`
 
-## 近期完成（2026-08-03）
+## 近期完成（2026-08-05）
 
+- 修复：删除用户时同步清空 `order_files.uploaded_by`（附件保留、上传人置空），并新增 024 迁移清理历史悬空引用；API 测试覆盖“用户上传附件后删除用户”链路
 - 安全加固：关闭 `/uploads` 静态裸访问（附件/导出仅走鉴权与票据接口）、健康检查增加数据库探活、订单编号唯一冲突由 500 改为 400、阶段完成通知 await 化并记录失败、nginx 上传上限与 multer 对齐 20MB
 - 安全：JWT 服务端吊销（`users.token_version`），退出登录/修改密码/管理员重置密码后旧令牌立即失效
 - 安全：登录限流改为 IP 维度（20 次/30 分钟），防止账号被恶意锁定
