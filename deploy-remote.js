@@ -115,6 +115,7 @@ conn.on('ready', () => {
         ['lib/stale-asset-map.json', `${BASE}/lib/stale-asset-map.json`],
         ['shared/stage-defs.json', `${BASE}/shared/stage-defs.json`],
         ['shared/stage-durations.json', `${BASE}/shared/stage-durations.json`],
+        ['shared/overdue-escalation.json', `${BASE}/shared/overdue-escalation.json`],
         ['shared/status-labels.json', `${BASE}/shared/status-labels.json`],
         ['shared/role-labels.json', `${BASE}/shared/role-labels.json`],
         ['scripts/restore-drill.sh', `${BASE}/scripts/restore-drill.sh`],

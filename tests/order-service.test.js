@@ -537,3 +537,57 @@ test('material_in completion backfills all purchase actual arrival', withNoopAud
     database.getDb = original;
   }
 }));
+
+test('shipping completion backfills actual delivery date', withNoopAudit(async () => {
+  const fake = recordingDb({
+    stageFor: key => ({ ...genericStage(key), department_id: 9 }),
+    allStatuses: notAllDone
+  });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStage(admin, 1, 'shipping', { status: 'completed' });
+    assert.equal(r.status, 200);
+    const orderUpdate = fake.runs.find(x => x.sql.includes('actual_delivery_date') && x.sql.includes('UPDATE orders'));
+    assert.ok(orderUpdate);
+    const today = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    assert.equal(orderUpdate.params[0], today);
+  } finally {
+    database.getDb = original;
+  }
+}));
+
+test('order completes only when all stages completed', withNoopAudit(async () => {
+  const allCompleted = Array.from({ length: 23 }, () => ({ status: 'completed' }));
+  const fake = recordingDb({
+    stageFor: key => ({ ...genericStage(key), department_id: 9 }),
+    allStatuses: allCompleted
+  });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStage(admin, 1, 'shipping', { status: 'completed' });
+    assert.equal(r.status, 200);
+    const orderDone = fake.runs.find(x => x.sql.includes("status = 'completed'") && x.sql.includes('UPDATE orders'));
+    assert.ok(orderDone);
+    assert.ok(orderDone.params[0]);
+  } finally {
+    database.getDb = original;
+  }
+}));
+
+test('start blocked until dependency completed', async () => {
+  const fake = recordingDb({
+    stageFor: key => ({ ...genericStage(key), department_id: 2, status: 'pending' }),
+    depsStatuses: [{ status: 'pending' }]
+  });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStage(admin, 1, 'deposit_confirm', { status: 'in_progress' });
+    assert.equal(r.status, 400);
+    assert.ok(r.body.error.includes('尚未完成'));
+  } finally {
+    database.getDb = original;
+  }
+});

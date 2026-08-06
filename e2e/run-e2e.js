@@ -186,6 +186,32 @@ async function getOrderId(page, orderNo) {
     if (!/^\/orders\/\d+$/.test(path)) throw new Error('todo did not navigate to detail: ' + path);
   });
 
+  await check('overdue badge shown on orders list, detail and todos', async () => {
+    const overdueNo = 'E2E-OVERDUE-' + Date.now();
+    await page.goto(BASE + '/orders', { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.waitForSelector('.page-header .btn-primary', { timeout: 30000 });
+    await page.locator('.page-header .btn-primary').click();
+    await page.waitForSelector('.modal', { timeout: 10000 });
+    await page.locator('.modal input[type=text]').fill(overdueNo);
+    await page.locator('.modal input[type=date]').fill('2020-01-01');
+    await page.locator('.modal .modal-actions .btn-primary').click();
+    await page.waitForSelector('.modal', { state: 'detached', timeout: 15000 }).catch(() => {});
+    await page.waitForSelector('.table-wrapper', { timeout: 30000 });
+    const row = page.locator('tbody tr', { hasText: overdueNo });
+    if ((await row.count()) === 0) throw new Error('overdue order row missing');
+    if (!(await row.innerText()).includes('超期')) throw new Error('orders list overdue stamp missing');
+    await row.locator('button').first().click();
+    await page.waitForSelector('.detail-grid', { timeout: 30000 });
+    if (!(await page.locator('.detail-grid').innerText()).includes('当前节点超期')) {
+      throw new Error('detail overdue badge missing');
+    }
+    await page.goto(BASE + '/todos', { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.waitForSelector('.todo-item', { timeout: 30000 });
+    const todo = page.locator('.todo-item', { hasText: overdueNo });
+    if ((await todo.count()) === 0) throw new Error('overdue todo missing');
+    if (!(await todo.innerText()).includes('超期')) throw new Error('todo overdue stamp missing');
+  });
+
   await check('upload attachment and preview via UI', async () => {
     await page.goto(BASE + '/orders', { waitUntil: 'domcontentloaded', timeout: 45000 });
     await page.locator('tbody tr', { hasText: orderNo }).locator('button').first().click();

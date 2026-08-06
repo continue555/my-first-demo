@@ -38,7 +38,7 @@
           <div class="label">实际发货时间<span v-if="overdueInfo" :class="overdueInfo.stampClass">{{ overdueInfo.stampText }}</span></div>
           <div class="value" :class="overdueInfo?.cssClass">{{ order.actual_delivery_date || '-' }}</div>
         </div>
-        <div class="detail-item"><div class="label">订单状态</div><div class="value"><span class="status-badge" :class="'status-' + order.status">{{ statusText(order.status) }}</span></div></div>
+        <div class="detail-item"><div class="label">订单状态</div><div class="value"><span class="status-badge" :class="'status-' + order.status">{{ statusText(order.status) }}</span><span v-if="currentStageOverdue" class="overdue-red-stamp">当前节点超期</span></div></div>
         <div class="detail-item"><div class="label">创建人</div><div class="value">{{ order.creator_name || '-' }}</div></div>
       </div>
       <div class="attachment-section">
@@ -225,6 +225,10 @@ function isFollowUpStage(stage) { return stage && FOLLOW_UP_STAGE_KEYS.includes(
 
 const mainStages = computed(() => stages.value.filter(s => !s.parent_stage_key));
 const productionStages = computed(() => stages.value.filter(s => s.parent_stage_key === 'production'));
+const currentStageOverdue = computed(() => {
+  const current = (stages.value || []).find(s => s.status !== 'completed');
+  return current ? !!getOverdueInfo(current) : false;
+});
 const canShowSubStages = computed(() => {
   const prodOrder = mainStages.value.find(s => s.stage_key === 'production_order');
   return prodOrder && prodOrder.status !== 'pending';

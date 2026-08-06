@@ -458,6 +458,14 @@ async function updateStage(user, id, stageKey, body) {
       `).run(now, id, ...PURCHASE_STAGE_KEYS);
     }
 
+    // 发货完成时回填实际交货日期
+    if (stageKey === 'shipping') {
+      await db.prepare(`
+        UPDATE orders SET actual_delivery_date = COALESCE(actual_delivery_date, ?), updated_at = datetime('now', '+8 hours')
+        WHERE id = ?
+      `).run(now.slice(0, 10), id);
+    }
+
     // 检查是否所有阶段都完成
     const allStages = await db.prepare('SELECT status FROM process_stages WHERE order_id = ?').all(id);
     const allDone = allStages.every(s => s.status === 'completed');
