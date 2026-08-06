@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const database = require('../database');
 const stageDefs = require('../shared/stage-defs.json');
 const STAGE_DURATIONS_DAYS = require('../shared/stage-durations.json');
-const { buildScheduleSuggestions, computeDownstreamSuggestions } = require('../lib/stage-scheduler');
+const { buildScheduleSuggestions, buildSchedulePlan, computeDownstreamSuggestions } = require('../lib/stage-scheduler');
 const { applyDeliverySchedule, recomputeDownstream } = require('../services/schedule-service');
 const { createOrder } = require('../services/order-service');
 
@@ -62,6 +62,22 @@ test('backward schedule computes serial chain and critical path', () => {
   assert.equal(plan.frame_follow_up.start_date, null);
 });
 
+test('schedule plan shifts forward when delivery is unreachable from today', () => {
+  const plan = buildSchedulePlan(stageDefs, '2026-08-10', '2026-08-06');
+  assert.equal(plan.shifted, true);
+  assert.equal(plan.achievedDeliveryDate, '2026-09-19');
+  assert.equal(plan.suggestions.contract_sign.start_date, '2026-08-06');
+  assert.equal(plan.suggestions.shipping.planned_end_date, '2026-09-19');
+  assert.ok(plan.suggestions.delivery_payment.planned_end_date >= '2026-08-06');
+});
+
+test('schedule plan keeps dates when earliest start is after min start', () => {
+  const plan = buildSchedulePlan(stageDefs, '2026-08-10', '2026-01-01');
+  assert.equal(plan.shifted, false);
+  assert.equal(plan.achievedDeliveryDate, '2026-08-10');
+  assert.equal(plan.suggestions.contract_sign.start_date, '2026-06-27');
+});
+
 test('manual change recomputes downstream and flags conflict', () => {
   const dates = {
     delivery_payment: { start_date: null, planned_end_date: '2026-08-09' },
@@ -107,10 +123,10 @@ test('applyDeliverySchedule fills unset dates and keeps existing', async () => {
   ];
   const db = fakeDb({ stages });
   await withDb(db, async () => {
-    const result = await applyDeliverySchedule(db, 1, '2026-08-10', false);
+    const result = await applyDeliverySchedule(db, 1, '2027-08-10', false);
     assert.equal(result.written, 2);
     const shippingRun = db.runs.find(r => r.params.includes('shipping'));
-    assert.equal(shippingRun.params[1], '2026-08-10');
+    assert.equal(shippingRun.params[1], '2027-08-10');
     assert.ok(!db.runs.some(r => r.params.includes('deposit_confirm')));
   });
 });
@@ -121,10 +137,10 @@ test('applyDeliverySchedule overwrites when explicitly requested', async () => {
   ];
   const db = fakeDb({ stages });
   await withDb(db, async () => {
-    await applyDeliverySchedule(db, 1, '2026-08-10', true);
+    await applyDeliverySchedule(db, 1, '2027-08-10', true);
     const run = db.runs.find(r => r.params.includes('deposit_confirm'));
-    assert.equal(run.params[0], '2026-06-28');
-    assert.equal(run.params[1], '2026-06-29');
+    assert.equal(run.params[0], '2027-06-28');
+    assert.equal(run.params[1], '2027-06-29');
   });
 });
 
@@ -162,13 +178,13 @@ test('recomputeDownstream warns and keeps early existing downstream date', async
 test('createOrder writes scheduled suggestion dates', async () => {
   const db = fakeDb({ stages: [] });
   await withDb(db, async () => {
-    const r = await createOrder(admin, { customer_name: 'T', project_name: 'P', planned_delivery_date: '2026-08-10' });
+    const r = await createOrder(admin, { customer_name: 'T', project_name: 'P', planned_delivery_date: '2027-08-10' });
     assert.equal(r.status, 201);
     const contract = db.runs.find(r => r.params.includes('contract_sign'));
     const shipping = db.runs.find(r => r.params.includes('shipping'));
-    assert.equal(contract.params[7], '2026-06-27');
-    assert.equal(contract.params[8], '2026-06-28');
-    assert.equal(shipping.params[7], '2026-08-09');
-    assert.equal(shipping.params[8], '2026-08-10');
+    assert.equal(contract.params[7], '2027-06-27');
+    assert.equal(contract.params[8], '2027-06-28');
+    assert.equal(shipping.params[7], '2027-08-09');
+    assert.equal(shipping.params[8], '2027-08-10');
   });
 });

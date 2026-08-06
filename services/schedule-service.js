@@ -2,6 +2,7 @@ const database = require('../database');
 const STAGE_DEFINITIONS = require('../shared/stage-defs.json');
 const {
   buildScheduleSuggestions,
+  buildSchedulePlan,
   computeDownstreamSuggestions,
   collectDescendants,
   addDays,
@@ -14,7 +15,8 @@ function getDb() {
 
 // 按计划交货日期写入建议日期；overwrite=false 时只补未设置的计划日期
 async function applyDeliverySchedule(db, orderId, plannedDeliveryDate, overwrite) {
-  const suggestions = buildScheduleSuggestions(STAGE_DEFINITIONS, plannedDeliveryDate);
+  const plan = buildSchedulePlan(STAGE_DEFINITIONS, plannedDeliveryDate);
+  const suggestions = plan.suggestions;
   if (Object.keys(suggestions).length === 0) return { written: 0 };
   const stages = await db.prepare(
     'SELECT stage_key, start_date, planned_end_date FROM process_stages WHERE order_id = ?'
@@ -32,7 +34,10 @@ async function applyDeliverySchedule(db, orderId, plannedDeliveryDate, overwrite
     `).run(nextStart, nextPlanned, orderId, row.stage_key);
     written++;
   }
-  return { written };
+  return {
+    written,
+    ...(plan.shifted ? { shifted: true, achievedDeliveryDate: plan.achievedDeliveryDate } : {})
+  };
 }
 
 // 手工改期后自动重算下游：未设置的下游写入建议值，已有且早于上游的仅返回冲突提示

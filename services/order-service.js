@@ -7,7 +7,7 @@ const STAGE_DEFINITIONS = require('../shared/stage-defs.json');
 const sanitize = require('../lib/sanitize');
 const { canOperateStage } = require('../lib/stage-permissions');
 const { buildCurrentStage } = require('../lib/current-stage');
-const { buildScheduleSuggestions, STAGE_DURATIONS_DAYS, addDays } = require('../lib/stage-scheduler');
+const { buildSchedulePlan, STAGE_DURATIONS_DAYS, addDays } = require('../lib/stage-scheduler');
 const { applyDeliverySchedule, recomputeDownstream, shiftDownstreamForActual } = require('../services/schedule-service');
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 
@@ -259,7 +259,10 @@ async function createOrder(user, body) {
   const orderId = result.lastInsertRowid;
 
   // 创建所有流程节点
-  const suggestions = v.planned_delivery_date ? buildScheduleSuggestions(STAGE_DEFINITIONS, v.planned_delivery_date) : {};
+  const plan = v.planned_delivery_date
+    ? buildSchedulePlan(STAGE_DEFINITIONS, v.planned_delivery_date)
+    : { suggestions: {}, shifted: false, achievedDeliveryDate: null };
+  const suggestions = plan.suggestions;
   const insertStage = await db.prepare(`
     INSERT INTO process_stages (order_id, stage_key, stage_name, stage_order, parent_stage_key, department_id, depends_on, start_date, planned_end_date, planned_end_source, status)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
@@ -276,7 +279,17 @@ async function createOrder(user, body) {
 
   await logAudit(user.id, user.name, "创建订单", "order", orderId, `订单编号: ${orderNo}, 客户: ${v.customer_name}`);
 
-  return { status: 201, body: { message: '订单创建成功', orderId, orderNo } };
+  return {
+    status: 201,
+    body: {
+      message: '订单创建成功',
+      orderId,
+      orderNo,
+      ...(plan.shifted
+        ? { deliveryNote: `按当前标准周期最早可交货日期为 ${plan.achievedDeliveryDate}，已按该日期生成建议排期` }
+        : {})
+    }
+  };
 }
 
 async function getOrder(id) {
@@ -329,13 +342,14 @@ async function updateOrder(user, id, body) {
   const explicitRecompute = body.recompute_dates === true;
   let scheduleNote = '';
   if ((deliveryChanged || explicitRecompute) && (v.planned_delivery_date || order.planned_delivery_date)) {
-    const { written } = await applyDeliverySchedule(
+    const result = await applyDeliverySchedule(
       db,
       id,
       v.planned_delivery_date || order.planned_delivery_date,
       explicitRecompute
     );
-    scheduleNote = `，倒排计划建议更新 ${written} 个节点`;
+    scheduleNote = `，倒排计划建议更新 ${result.written} 个节点`;
+    if (result.shifted) scheduleNote += `（交期不可达，最早可交货 ${result.achievedDeliveryDate}）`;
   }
 
   await logAudit(user.id, user.name, "编辑订单", "order", parseInt(id), `订单编号: ${order.order_no}${scheduleNote}`);
