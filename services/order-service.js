@@ -7,8 +7,8 @@ const STAGE_DEFINITIONS = require('../shared/stage-defs.json');
 const sanitize = require('../lib/sanitize');
 const { canOperateStage } = require('../lib/stage-permissions');
 const { buildCurrentStage } = require('../lib/current-stage');
-const { buildScheduleSuggestions } = require('../lib/stage-scheduler');
-const { applyDeliverySchedule, recomputeDownstream } = require('../services/schedule-service');
+const { buildScheduleSuggestions, STAGE_DURATIONS_DAYS, addDays } = require('../lib/stage-scheduler');
+const { applyDeliverySchedule, recomputeDownstream, shiftDownstreamForActual } = require('../services/schedule-service');
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 
 const ORDER_STATUSES = ['pending', 'in_progress', 'completed'];
@@ -261,15 +261,16 @@ async function createOrder(user, body) {
   // 创建所有流程节点
   const suggestions = v.planned_delivery_date ? buildScheduleSuggestions(STAGE_DEFINITIONS, v.planned_delivery_date) : {};
   const insertStage = await db.prepare(`
-    INSERT INTO process_stages (order_id, stage_key, stage_name, stage_order, parent_stage_key, department_id, depends_on, start_date, planned_end_date, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
+    INSERT INTO process_stages (order_id, stage_key, stage_name, stage_order, parent_stage_key, department_id, depends_on, start_date, planned_end_date, planned_end_source, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
   `);
 
   await Promise.all(STAGE_DEFINITIONS.map(stage =>
     insertStage.run(
       orderId, stage.key, stage.name, stage.order, stage.parentKey, stage.deptId, stage.dependsOn,
       suggestions[stage.key]?.start_date ?? null,
-      suggestions[stage.key]?.planned_end_date ?? null
+      suggestions[stage.key]?.planned_end_date ?? null,
+      'auto'
     )
   ));
 
@@ -411,6 +412,18 @@ async function updateStage(user, id, stageKey, body) {
       WHERE order_id = ? AND stage_key = ?
     `).run(status, autoStage ? null : now, notes ?? null, user.id, user.name, id, stageKey);
 
+    // 实际开始晚于计划时，自动顺延下游未开始节点
+    if (!autoStage && stage.planned_end_date) {
+      const duration = STAGE_DURATIONS_DAYS[stageKey] || 0;
+      const plannedStart = duration > 0 ? addDays(stage.planned_end_date, -duration) : null;
+      if (plannedStart) {
+        await shiftDownstreamForActual(db, id, stageKey, now, plannedStart, {
+          type: 'start',
+          stageName: stage.stage_name
+        });
+      }
+    }
+
     // 更新订单状态为进行中
     if (order.status === 'pending') {
       await db.prepare("UPDATE orders SET status = 'in_progress', updated_at = datetime('now', '+8 hours') WHERE id = ?").run(id);
@@ -464,6 +477,14 @@ async function updateStage(user, id, stageKey, body) {
         UPDATE orders SET actual_delivery_date = COALESCE(actual_delivery_date, ?), updated_at = datetime('now', '+8 hours')
         WHERE id = ?
       `).run(now.slice(0, 10), id);
+    }
+
+    // 实际完成晚于/早于计划时，自动顺延或提前下游未开始节点（采购节点实际到货由下游回填，跳过）
+    if (actualEnd) {
+      await shiftDownstreamForActual(db, id, stageKey, actualEnd, stage.planned_end_date, {
+        type: 'completion',
+        stageName: stage.stage_name
+      });
     }
 
     // 检查是否所有阶段都完成
@@ -531,7 +552,7 @@ async function updateStageTime(user, id, stageKey, body) {
   }
 
   await db.prepare(`
-    UPDATE process_stages SET start_date = COALESCE(?, start_date), planned_end_date = COALESCE(?, planned_end_date), updated_at = datetime('now', '+8 hours')
+    UPDATE process_stages SET start_date = COALESCE(?, start_date), planned_end_date = COALESCE(?, planned_end_date), planned_end_source = 'manual', updated_at = datetime('now', '+8 hours')
     WHERE order_id = ? AND stage_key = ?
   `).run(start.value ?? null, planned.value ?? null, id, stageKey);
 

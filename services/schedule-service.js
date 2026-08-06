@@ -1,6 +1,12 @@
 const database = require('../database');
 const STAGE_DEFINITIONS = require('../shared/stage-defs.json');
-const { buildScheduleSuggestions, computeDownstreamSuggestions } = require('../lib/stage-scheduler');
+const {
+  buildScheduleSuggestions,
+  computeDownstreamSuggestions,
+  collectDescendants,
+  addDays,
+  dayDiff
+} = require('../lib/stage-scheduler');
 
 function getDb() {
   return database.getDb();
@@ -21,7 +27,7 @@ async function applyDeliverySchedule(db, orderId, plannedDeliveryDate, overwrite
     const nextPlanned = overwrite ? sug.planned_end_date : (row.planned_end_date ?? sug.planned_end_date);
     if (nextStart === row.start_date && nextPlanned === row.planned_end_date) continue;
     await db.prepare(`
-      UPDATE process_stages SET start_date = ?, planned_end_date = ?, updated_at = datetime('now', '+8 hours')
+      UPDATE process_stages SET start_date = ?, planned_end_date = ?, planned_end_source = 'auto', updated_at = datetime('now', '+8 hours')
       WHERE order_id = ? AND stage_key = ?
     `).run(nextStart, nextPlanned, orderId, row.stage_key);
     written++;
@@ -55,4 +61,62 @@ async function recomputeDownstream(db, orderId, changedStageKey, changedPlannedE
   return warnings;
 }
 
-module.exports = { applyDeliverySchedule, recomputeDownstream };
+// 实际完成/开始相对计划变化时，顺延或提前下游未开始且非手工设置的节点
+async function shiftDownstreamForActual(db, orderId, stageKey, actualDate, plannedDate, options = {}) {
+  const { type = 'completion', stageName = stageKey } = options;
+  if (!actualDate || !plannedDate) return { shifted: 0, notificationCount: 0 };
+  const delta = dayDiff(plannedDate, actualDate);
+  if (!Number.isFinite(delta) || delta === 0) return { shifted: 0, notificationCount: 0 };
+  if (type === 'start' && delta < 0) return { shifted: 0, notificationCount: 0 };
+
+  const descendants = collectDescendants(STAGE_DEFINITIONS, stageKey);
+  if (descendants.size === 0) return { shifted: 0, notificationCount: 0 };
+  const placeholders = [...descendants].map(() => '?').join(',');
+  const rows = await db.prepare(`
+    SELECT ps.stage_key, ps.stage_name, ps.status, ps.start_date, ps.planned_end_date,
+           ps.planned_end_source, ps.department_id
+    FROM process_stages ps
+    WHERE ps.order_id = ? AND ps.stage_key IN (${placeholders})
+  `).all(orderId, ...descendants);
+
+  const order = await db.prepare('SELECT order_no FROM orders WHERE id = ?').get(orderId);
+  const orderNo = order && order.order_no ? order.order_no : String(orderId);
+  const action = type === 'completion' ? '实际完成' : '实际开始';
+  const verb = delta > 0 ? `推迟 ${delta} 天` : `提前 ${Math.abs(delta)} 天`;
+  const affected = [];
+
+  for (const row of rows) {
+    if (row.status !== 'pending' || row.planned_end_source === 'manual' || !row.planned_end_date) continue;
+    const nextPlanned = addDays(row.planned_end_date, delta);
+    const nextStart = row.start_date ? addDays(row.start_date, delta) : null;
+    await db.prepare(`
+      UPDATE process_stages SET start_date = ?, planned_end_date = ?, updated_at = datetime('now', '+8 hours')
+      WHERE order_id = ? AND stage_key = ?
+    `).run(nextStart, nextPlanned, orderId, row.stage_key);
+    affected.push({ row, nextPlanned });
+  }
+
+  let notificationCount = 0;
+  for (const item of affected) {
+    const recipient = item.row.department_id
+      ? { dept_id: item.row.department_id, role: null }
+      : { dept_id: null, role: 'management' };
+    const message = `订单 ${orderNo} 的"${stageName}"${action}${verb}，下游"${item.row.stage_name}"计划完成日期已自动调整为 ${item.nextPlanned}（可手工修改）`;
+    const result = await db.prepare(`
+      INSERT INTO notifications (order_id, message, recipient_dept_id, recipient_role, source_key)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT (source_key) WHERE source_key IS NOT NULL DO NOTHING
+    `).run(
+      orderId,
+      message,
+      recipient.dept_id,
+      recipient.role,
+      `schedule_shift:${orderId}:${stageKey}:${item.row.stage_key}:${String(actualDate).slice(0, 10)}`
+    );
+    if (result.changes > 0) notificationCount++;
+  }
+
+  return { shifted: affected.length, notificationCount };
+}
+
+module.exports = { applyDeliverySchedule, recomputeDownstream, shiftDownstreamForActual };
