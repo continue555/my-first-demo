@@ -1,10 +1,10 @@
 # 项目状态快照
 
-> 用途：供长时间会话压缩后快速恢复上下文。更新日期：2026-08-05。
+> 用途：供长时间会话压缩后快速恢复上下文。更新日期：2026-08-06。
 
 ## 当前状态
 
-- 生产：http://42.194.139.7，PM2 `blowing-machine`，线上 API 测试 58/58 通过
+- 生产：http://42.194.139.7，PM2 `blowing-machine`，线上 API 测试 63/63 通过
 - 技术栈：Node.js + Express + PostgreSQL、Vue 3 + Vite 7、Pinia、ExcelJS、zod、docx-preview、read-excel-file
 - GitHub：continue555/my-first-demo，master 分支，CI 七任务全绿
 - 部署：`deploy-remote.js` 上传 → 服务器 `deploy/server-deploy.sh` 备份/构建/重启/测试/自动回滚
@@ -18,7 +18,7 @@
 - 部署：`$env:SSH_PASS=...; node deploy-remote.js`（首次/依赖变更加 `$env:DEPLOY_INSTALL='1'`）
 - 服务器端：`bash deploy/server-deploy.sh`、`bash deploy/rollback.sh <时间戳>`、`bash scripts/restore-drill.sh`、`bash scripts/health-check.sh`、`bash scripts/log-query.sh <关键字>`
 
-## 近期完成（2026-08-05）
+## 近期完成（2026-08-06）
 
 - 修复：删除用户时同步清空 `order_files.uploaded_by`（附件保留、上传人置空），并新增 024 迁移清理历史悬空引用；API 测试覆盖“用户上传附件后删除用户”链路
 - 功能：订单列表/仪表盘返回“当前节点”聚合（首个未完成节点、负责部门、计划完成日期、超期标记，`progress` 口径不变）；新增“我的待办”（`/api/todos` + `/todos` 页面，按部门树/角色聚合进行中与待开始订单，点击跳详情）
@@ -54,7 +54,7 @@
 - 部署：新增 CI 硬校验 `check-assets-in-sync`（前端构建后比对资源映射）与 `check-deploy-manifest`（上传清单覆盖检查）；`deploy-remote.js` 上传前本地预检缺失文件与失效映射目标
 - 测试：新增 service 层单元测试（登录限流、阶段推进/并发唯一冲突、单订单导出工作簿），E2E 覆盖附件上传/预览、用户管理、批量导出
 - 测试：E2E 增加浏览器真实下载导出文件（下载后解析内容）与 Excel/Word 在线预览渲染验证
-- 前端：接入 Vitest + @vue/test-utils（组件/工具测试 14 项）；移动端可点击元素改为原生按钮并补 `aria-label` 与键盘焦点；TypeScript 按用户确认维持现状
+- 前端：接入 Vitest + @vue/test-utils（组件/工具测试 19 项）；移动端可点击元素改为原生按钮并补 `aria-label` 与键盘焦点；TypeScript 按用户确认维持现状
 - 移动端兼容：viewport-fit=cover + safe-area 适配、输入框 16px 防 iOS 自动缩放、100dvh 视口适配；E2E 增加 iPhone 13/iPhone SE/Pixel 7/微信 UA 移动端矩阵
 - 架构：auth/附件/导出业务已拆 service（`auth-service`、`files-service`、`export-service`），routes 全部为薄路由
 - 依赖：后端 exceljs 依赖的 uuid 已通过 npm overrides 升级至 11.1.1，后端生产依赖审计 0 漏洞（无需破坏性降级 exceljs）
@@ -78,9 +78,10 @@
 
 ## 架构速览
 
-- `services/`：order-service、audit-service、notifications-service、auth-service、files-service、export-service
+- `services/`：order-service、audit-service、notifications-service、auth-service、files-service、export-service、todo-service、schedule-service
 - `routes/`：薄路由，仅保留请求/响应与中间件编排
-- `lib/`：overdue、sanitize、stage-permissions、validators(zod)、download-ticket、file-permissions、cookies、dept-filter
-- `migrations/`：PostgreSQL 自动迁移（15 个版本）
+- `lib/`：overdue、sanitize、stage-permissions、validators(zod)、download-ticket、file-permissions、cookies、dept-filter、current-stage、stage-scheduler
+- `shared/`：stage-defs、stage-durations、overdue-escalation、status-labels、role-labels
+- `migrations/`：PostgreSQL 自动迁移（25 个版本：001-024、026；025 已撤销）
 - `e2e/`、`tests/`：Playwright E2E、Node 单元测试
 - `deploy/`：server-deploy.sh、rollback.sh；`scripts/`：restore-drill、health-check、install-crons、log-query
