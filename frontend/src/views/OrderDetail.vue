@@ -520,7 +520,8 @@ function formatSize(bytes) {
 async function updateStage(stage, status) {
   // 点击"开始"时，检查是否已设置时间
   const autoStage = isFollowUpStage(stage) || stage.stage_key === 'material_in' || stage.stage_key === 'delivery_payment';
-  if (status === 'in_progress' && stage.status === 'pending' && (!stage.planned_end_date || (!autoStage && !stage.start_date))) {
+  const canStartBeforePlan = stage.stage_key === 'mold_design_purchase';
+  if (status === 'in_progress' && stage.status === 'pending' && !canStartBeforePlan && (!stage.planned_end_date || (!autoStage && !stage.start_date))) {
     toast.show(autoStage ? '请先设置计划完成日期' : '请先设置开始时间和计划完成时间', 'error');
     if (!autoStage || stage.stage_key === 'delivery_payment') showTimeModal(stage);
     return;
