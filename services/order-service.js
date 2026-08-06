@@ -7,6 +7,8 @@ const STAGE_DEFINITIONS = require('../shared/stage-defs.json');
 const sanitize = require('../lib/sanitize');
 const { canOperateStage } = require('../lib/stage-permissions');
 const { buildCurrentStage } = require('../lib/current-stage');
+const { buildScheduleSuggestions } = require('../lib/stage-scheduler');
+const { applyDeliverySchedule, recomputeDownstream } = require('../services/schedule-service');
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 
 const ORDER_STATUSES = ['pending', 'in_progress', 'completed'];
@@ -257,13 +259,18 @@ async function createOrder(user, body) {
   const orderId = result.lastInsertRowid;
 
   // 创建所有流程节点
+  const suggestions = v.planned_delivery_date ? buildScheduleSuggestions(STAGE_DEFINITIONS, v.planned_delivery_date) : {};
   const insertStage = await db.prepare(`
-    INSERT INTO process_stages (order_id, stage_key, stage_name, stage_order, parent_stage_key, department_id, depends_on, status)
-    VALUES (?, ?, ?, ?, ?, ?, ?, 'pending')
+    INSERT INTO process_stages (order_id, stage_key, stage_name, stage_order, parent_stage_key, department_id, depends_on, start_date, planned_end_date, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
   `);
 
   await Promise.all(STAGE_DEFINITIONS.map(stage =>
-    insertStage.run(orderId, stage.key, stage.name, stage.order, stage.parentKey, stage.deptId, stage.dependsOn)
+    insertStage.run(
+      orderId, stage.key, stage.name, stage.order, stage.parentKey, stage.deptId, stage.dependsOn,
+      suggestions[stage.key]?.start_date ?? null,
+      suggestions[stage.key]?.planned_end_date ?? null
+    )
   ));
 
   await logAudit(user.id, user.name, "创建订单", "order", orderId, `订单编号: ${orderNo}, 客户: ${v.customer_name}`);
@@ -317,7 +324,20 @@ async function updateOrder(user, id, body) {
     WHERE id = ?
   `).run(v.customer_name ?? null, v.project_name ?? null, v.product_model ?? null, v.quantity ?? null, v.contract_amount ?? null, v.planned_delivery_date ?? null, v.actual_delivery_date ?? null, v.status ?? null, v.notes ?? null, id);
 
-  await logAudit(user.id, user.name, "编辑订单", "order", parseInt(id), `订单编号: ${order.order_no}`);
+  const deliveryChanged = v.planned_delivery_date && v.planned_delivery_date !== order.planned_delivery_date;
+  const explicitRecompute = body.recompute_dates === true;
+  let scheduleNote = '';
+  if ((deliveryChanged || explicitRecompute) && (v.planned_delivery_date || order.planned_delivery_date)) {
+    const { written } = await applyDeliverySchedule(
+      db,
+      id,
+      v.planned_delivery_date || order.planned_delivery_date,
+      explicitRecompute
+    );
+    scheduleNote = `，倒排计划建议更新 ${written} 个节点`;
+  }
+
+  await logAudit(user.id, user.name, "编辑订单", "order", parseInt(id), `订单编号: ${order.order_no}${scheduleNote}`);
 
   return { status: 200, body: { message: '更新成功' } };
 }
@@ -516,7 +536,19 @@ async function updateStageTime(user, id, stageKey, body) {
     await syncMaterialInPlanned(db, id);
   }
 
-  return { status: 200, body: { message: '时间更新成功' } };
+  let warnings = [];
+  if (planned.value) {
+    warnings = await recomputeDownstream(db, id, stageKey, planned.value);
+    await logAudit(user.id, user.name, '设置时间', 'order_stage', parseInt(id), `阶段: ${stage.stage_name}, 计划完成日期: ${planned.value}`);
+  }
+
+  return {
+    status: 200,
+    body: {
+      message: '时间更新成功',
+      ...(warnings.length > 0 ? { warnings } : {})
+    }
+  };
 }
 
 async function syncMaterialInPlanned(db, orderId) {

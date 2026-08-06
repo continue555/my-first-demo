@@ -546,10 +546,13 @@ function canSetTime(stage) {
 
 async function saveTime() {
   try {
-    await api.put(`/orders/${timeModal.value.orderId}/stages/${timeModal.value.stageKey}/time`, {
+    const data = await api.put(`/orders/${timeModal.value.orderId}/stages/${timeModal.value.stageKey}/time`, {
       start_date: timeModal.value.startDate, planned_end_date: timeModal.value.plannedEnd
     });
     toast.show('时间更新成功');
+    if (data.warnings && data.warnings.length > 0) {
+      for (const w of data.warnings) toast.show(w, 'error');
+    }
     timeModal.value.visible = false;
     load();
   } catch (e) {

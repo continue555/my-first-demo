@@ -194,7 +194,11 @@ async function main() {
   });
   await test("Planned delivery date required", async () => { const r = await req("POST", "/api/orders", { customer_name: "Test", project_name: "Test" }); return r.status === 400 ? {} : { error: "expected 400, got " + r.status }; });
   await test("Invalid quantity rejected", async () => { const r = await req("POST", "/api/orders", { customer_name: "Test", project_name: "Test", quantity: -1, planned_delivery_date: "2026-08-10" }); return r.status === 400 ? {} : { error: "expected 400, got " + r.status }; });
-  await test("Stage start without time rejected", async () => { const r = await req("PUT", `/api/orders/${createdOrderId}/stages/contract_sign`, { status: "in_progress" }); return r.status === 400 ? {} : { error: "expected 400, got " + r.status }; });
+  await test("Time baseline generated on create", async () => {
+    const r = await req("GET", `/api/orders/${createdOrderId}`);
+    const stage = (r.body.stages || []).find(s => s.stage_key === "contract_sign");
+    return stage && stage.planned_end_date ? {} : { error: "baseline planned date missing" };
+  });
   await test("Order detail (23 stages)", async () => { const r = await req("GET", `/api/orders/${createdOrderId}`); return r.body.stages && r.body.stages.length === 23 ? {} : { error: "expected 23 stages" }; });
   await test("Debug stage renamed to 调试验收", async () => {
     const r = await req("GET", `/api/orders/${createdOrderId}`);
