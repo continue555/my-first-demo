@@ -175,16 +175,13 @@ test('recomputeDownstream warns and keeps early existing downstream date', async
   });
 });
 
-test('createOrder writes scheduled suggestion dates', async () => {
+test('createOrder creates stages without auto dates', async () => {
   const db = fakeDb({ stages: [] });
   await withDb(db, async () => {
     const r = await createOrder(admin, { customer_name: 'T', project_name: 'P', planned_delivery_date: '2027-08-10' });
     assert.equal(r.status, 201);
     const contract = db.runs.find(r => r.params.includes('contract_sign'));
-    const shipping = db.runs.find(r => r.params.includes('shipping'));
-    assert.equal(contract.params[7], '2027-06-27');
-    assert.equal(contract.params[8], '2027-06-28');
-    assert.equal(shipping.params[7], '2027-08-09');
-    assert.equal(shipping.params[8], '2027-08-10');
+    assert.equal(contract.params[7], null);
+    assert.equal(contract.params[8], null);
   });
 });

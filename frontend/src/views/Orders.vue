@@ -214,9 +214,8 @@ async function createOrder() {
       planned_delivery_date: newOrder.value.planned_delivery_date || null,
       notes: ''
     };
-    const created = await api.post('/orders', body);
+    await api.post('/orders', body);
     toast.show('订单创建成功');
-    if (created.deliveryNote) toast.show(created.deliveryNote);
     showCreate.value = false;
     newOrder.value = { order_no: '', planned_delivery_date: '' };
     loadOrders(1);
