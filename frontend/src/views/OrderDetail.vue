@@ -537,7 +537,7 @@ function showTimeModal(stage) {
     visible: true, orderId: order.value.id, stageKey: stage.stage_key,
     stageName: stage.stage_name, startDate: stage.start_date || '', plannedEnd: stage.planned_end_date || '',
     isPurchase: isPurchaseStage(stage),
-    hideStart: stage.stage_key === 'delivery_payment'
+    hideStart: stage.stage_key !== 'contract_sign'
   };
 }
 

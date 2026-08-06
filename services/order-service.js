@@ -429,6 +429,21 @@ async function updateStage(user, id, stageKey, body) {
       WHERE order_id = ? AND stage_key = ?
     `).run(status, autoStage ? null : now, actualEnd, notes ?? null, user.id, user.name, id, stageKey);
 
+    // 下游节点开始时间自动取本节点实际完成时间（仅填充未设置，无开始时间概念的节点跳过）
+    if (actualEnd) {
+      const actualDate = actualEnd.slice(0, 10);
+      const nextKeys = STAGE_DEFINITIONS
+        .filter(d => String(d.dependsOn || '').split(',').map(k => k.trim()).includes(stageKey))
+        .map(d => d.key)
+        .filter(k => !NO_START_STAGE_KEYS.has(k));
+      for (const key of nextKeys) {
+        await db.prepare(`
+          UPDATE process_stages SET start_date = ?, updated_at = datetime('now', '+8 hours')
+          WHERE order_id = ? AND stage_key = ? AND start_date IS NULL
+        `).run(actualDate, id, key);
+      }
+    }
+
     // 采购完成时，同步对应采购跟进的计划到货时间（跟进无开始时间概念）
     if (PURCHASE_TO_FOLLOW_UP[stageKey]) {
       await db.prepare(`

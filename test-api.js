@@ -211,6 +211,14 @@ async function main() {
   });
   await test("Stage start", async () => { await req("PUT", `/api/orders/${createdOrderId}/stages/contract_sign/time`, { start_date: "2026-08-01T09:00", planned_end_date: "2026-08-02T09:00" }); const r = await req("PUT", `/api/orders/${createdOrderId}/stages/contract_sign`, { status: "in_progress" }); return r.body.message ? {} : { error: "start failed" }; });
   await test("Stage complete", async () => { const r = await req("PUT", `/api/orders/${createdOrderId}/stages/contract_sign`, { status: "completed" }); return r.body.message ? {} : { error: "complete failed" }; });
+  await test("Next stage start auto-filled from actual completion", async () => {
+    const r = await req("GET", `/api/orders/${createdOrderId}`);
+    const contract = (r.body.stages || []).find(s => s.stage_key === "contract_sign");
+    const deposit = (r.body.stages || []).find(s => s.stage_key === "deposit_confirm");
+    const ok = deposit && deposit.start_date && contract && contract.actual_end_date &&
+      String(deposit.start_date).slice(0, 10) === String(contract.actual_end_date).slice(0, 10);
+    return ok ? {} : { error: "next stage start not auto-filled" };
+  });
   await test("Full flow all 23 stages", async () => {
     const detail = await req("GET", `/api/orders/${createdOrderId}`);
     const statusMap = {};

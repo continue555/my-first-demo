@@ -611,3 +611,23 @@ test('start overwrites suggested start date with click time', withNoopAudit(asyn
     database.getDb = original;
   }
 }));
+
+test('completion auto-fills next stage start from actual date', withNoopAudit(async () => {
+  const fake = recordingDb({
+    stageFor: key => ({ ...genericStage(key), department_id: 1 }),
+    allStatuses: notAllDone
+  });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStage(admin, 1, 'contract_sign', { status: 'completed' });
+    assert.equal(r.status, 200);
+    const nextRun = fake.runs.find(x => x.sql.includes('start_date IS NULL') && x.params.includes('deposit_confirm'));
+    assert.ok(nextRun);
+    const today = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    assert.equal(nextRun.params[0], today);
+    assert.ok(!fake.runs.some(x => x.sql.includes('start_date IS NULL') && x.params.includes('frame_follow_up')));
+  } finally {
+    database.getDb = original;
+  }
+}));
