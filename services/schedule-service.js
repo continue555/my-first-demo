@@ -96,12 +96,22 @@ async function shiftDownstreamForActual(db, orderId, stageKey, actualDate, plann
     affected.push({ row, nextPlanned });
   }
 
-  let notificationCount = 0;
+  const byRecipient = new Map();
   for (const item of affected) {
-    const recipient = item.row.department_id
-      ? { dept_id: item.row.department_id, role: null }
-      : { dept_id: null, role: 'management' };
-    const message = `订单 ${orderNo} 的"${stageName}"${action}${verb}，下游"${item.row.stage_name}"计划完成日期已自动调整为 ${item.nextPlanned}（可手工修改）`;
+    const key = item.row.department_id ? `dept:${item.row.department_id}` : 'role:management';
+    if (!byRecipient.has(key)) {
+      byRecipient.set(key, {
+        dept_id: item.row.department_id || null,
+        role: item.row.department_id ? null : 'management',
+        stages: []
+      });
+    }
+    byRecipient.get(key).stages.push(`${item.row.stage_name}（${item.nextPlanned}）`);
+  }
+
+  let notificationCount = 0;
+  for (const [key, recipient] of byRecipient) {
+    const message = `订单 ${orderNo} 的"${stageName}"${action}${verb}，已自动调整下游：${recipient.stages.join('、')}（可手工修改）`;
     const result = await db.prepare(`
       INSERT INTO notifications (order_id, message, recipient_dept_id, recipient_role, source_key)
       VALUES (?, ?, ?, ?, ?)
@@ -111,7 +121,7 @@ async function shiftDownstreamForActual(db, orderId, stageKey, actualDate, plann
       message,
       recipient.dept_id,
       recipient.role,
-      `schedule_shift:${orderId}:${stageKey}:${item.row.stage_key}:${String(actualDate).slice(0, 10)}`
+      `schedule_shift:${orderId}:${stageKey}:${key}:${String(actualDate).slice(0, 10)}`
     );
     if (result.changes > 0) notificationCount++;
   }
