@@ -22,12 +22,11 @@
 
 - 修复：删除用户时同步清空 `order_files.uploaded_by`（附件保留、上传人置空），并新增 024 迁移清理历史悬空引用；API 测试覆盖“用户上传附件后删除用户”链路
 - 功能：订单列表/仪表盘返回“当前节点”聚合（首个未完成节点、负责部门、计划完成日期、超期标记，`progress` 口径不变）；新增“我的待办”（`/api/todos` + `/todos` 页面，按部门树/角色聚合进行中与待开始订单，点击跳详情）
-- 时间联动：新增标准周期配置（`shared/stage-durations.json`）与倒排建议（建单/修改计划交货日自动生成，可改、已有日期不覆盖、`recompute_dates=true` 强制重算）；手工改期自动重算下游并提示冲突；时间变更写审计日志
+- 时间联动：标准周期配置（`shared/stage-durations.json`）保留未启用；时间变更写审计日志
 - 超期升级：节点超期先通知负责部门，连续超期达到阈值（`shared/overdue-escalation.json`，默认 3 天）升级通知上级部门或总经理，`source_key` 去重；发货完成回填实际交货日期；订单仅全节点完成后置为已完成；详情/列表/待办统一显示当前节点超期标识
-- 实际联动：节点实际完成/开始相对计划推迟时自动顺延下游；提前完成时以实际完成日为锚点前向重算下游（不早于当天），并通知受影响部门（迁移 026 新增 `planned_end_source` 区分自动/人工）
+- 流程调整：下游顺延/提前联动已删除，不再自动调整下游计划日期
 - 开始时间：点击“开始”时写入实际点击时间（不再保留倒排建议值）；未开始节点显示“计划开始”，开始后显示实际开始时间
-- 通知折叠：同一顺延/提前事件的部门级通知在通知中心折叠为一条摘要（可展开、组内一键已读），新增前端分组工具与 Vitest 测试
-- 倒排防早：倒排建议日期不会早于今天，交期不可达时整条排期顺延到今天可开始，并提示最早可交货日期（`buildSchedulePlan`）
+- 通知折叠：历史顺延通知在通知中心按事件折叠展示（可展开、组内一键已读），新增前端分组工具与 Vitest 测试
 - 流程调整：自动倒排已按用户要求停用，新订单不再自动生成节点计划日期（人工设置；采购-跟进-进仓联动保留）；`shared/stage-durations.json` 保留未启用
 - 流程调整：签订合同人工设置开始+计划完成；后续节点开始时间自动取上一节点实际完成日期（仅填空值），只设计划完成时间
 - 修复：新增/编辑用户校验部门必须存在（不存在返回 400“部门不存在”，不再 500）；上传附件到不存在订单返回 404“订单不存在”并清理临时文件
@@ -64,7 +63,7 @@
 - 依赖：修复新增 brace-expansion 高危（2.1.3 → 2.1.4，GHSA-rgw5-rvv9-x895），后端全量审计 0 漏洞
 - 移动端体验：底部导航、订单卡片、筛选保留、预览全屏
 - 安全：HttpOnly Cookie + CSRF、限流持久化、角色白名单、附件权限、参数校验、stats 接口按角色限制
-- 测试：API 65 项、后端单元 93 项、前端 Vitest 19 项、压力测试（并发建单/阶段推进/50 单导出）、E2E、依赖审计
+- 测试：API 65 项、后端单元 75 项、前端 Vitest 19 项、压力测试（并发建单/阶段推进/50 单导出）、E2E、依赖审计
 - 并发修复：阶段完成通知插入改为 `ON CONFLICT DO NOTHING`
 - 依赖：xlsx 已替换为 read-excel-file；Vite 升级 7.3.6，前端审计 0 漏洞；zod 接入关键写接口
 - 架构：订单/审计/通知/auth/附件/导出业务已拆 service；结构化日志
@@ -81,9 +80,9 @@
 
 ## 架构速览
 
-- `services/`：order-service、audit-service、notifications-service、auth-service、files-service、export-service、todo-service、schedule-service
+- `services/`：order-service、audit-service、notifications-service、auth-service、files-service、export-service、todo-service
 - `routes/`：薄路由，仅保留请求/响应与中间件编排
-- `lib/`：overdue、sanitize、stage-permissions、validators(zod)、download-ticket、file-permissions、cookies、dept-filter、current-stage、stage-scheduler
+- `lib/`：overdue、sanitize、stage-permissions、validators(zod)、download-ticket、file-permissions、cookies、dept-filter、current-stage
 - `shared/`：stage-defs、stage-durations、overdue-escalation、status-labels、role-labels
 - `migrations/`：PostgreSQL 自动迁移（25 个版本：001-024、026；025 已撤销）
 - `e2e/`、`tests/`：Playwright E2E、Node 单元测试

@@ -7,8 +7,6 @@ const STAGE_DEFINITIONS = require('../shared/stage-defs.json');
 const sanitize = require('../lib/sanitize');
 const { canOperateStage } = require('../lib/stage-permissions');
 const { buildCurrentStage } = require('../lib/current-stage');
-const { STAGE_DURATIONS_DAYS, addDays } = require('../lib/stage-scheduler');
-const { recomputeDownstream, shiftDownstreamForActual } = require('../services/schedule-service');
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 
 const ORDER_STATUSES = ['pending', 'in_progress', 'completed'];
@@ -395,18 +393,6 @@ async function updateStage(user, id, stageKey, body) {
       WHERE order_id = ? AND stage_key = ?
     `).run(status, autoStage ? null : now, notes ?? null, user.id, user.name, id, stageKey);
 
-    // 实际开始晚于计划时，自动顺延下游未开始节点
-    if (!autoStage && stage.planned_end_date) {
-      const duration = STAGE_DURATIONS_DAYS[stageKey] || 0;
-      const plannedStart = duration > 0 ? addDays(stage.planned_end_date, -duration) : null;
-      if (plannedStart) {
-        await shiftDownstreamForActual(db, id, stageKey, now, plannedStart, {
-          type: 'start',
-          stageName: stage.stage_name
-        });
-      }
-    }
-
     // 更新订单状态为进行中
     if (order.status === 'pending') {
       await db.prepare("UPDATE orders SET status = 'in_progress', updated_at = datetime('now', '+8 hours') WHERE id = ?").run(id);
@@ -475,14 +461,6 @@ async function updateStage(user, id, stageKey, body) {
         UPDATE orders SET actual_delivery_date = COALESCE(actual_delivery_date, ?), updated_at = datetime('now', '+8 hours')
         WHERE id = ?
       `).run(now.slice(0, 10), id);
-    }
-
-    // 实际完成晚于/早于计划时，自动顺延或提前下游未开始节点（采购节点实际到货由下游回填，跳过）
-    if (actualEnd) {
-      await shiftDownstreamForActual(db, id, stageKey, actualEnd, stage.planned_end_date, {
-        type: 'completion',
-        stageName: stage.stage_name
-      });
     }
 
     // 检查是否所有阶段都完成
@@ -563,19 +541,11 @@ async function updateStageTime(user, id, stageKey, body) {
     await syncMaterialInPlanned(db, id);
   }
 
-  let warnings = [];
   if (planned.value) {
-    warnings = await recomputeDownstream(db, id, stageKey, planned.value);
     await logAudit(user.id, user.name, '设置时间', 'order_stage', parseInt(id), `阶段: ${stage.stage_name}, 计划完成日期: ${planned.value}`);
   }
 
-  return {
-    status: 200,
-    body: {
-      message: '时间更新成功',
-      ...(warnings.length > 0 ? { warnings } : {})
-    }
-  };
+  return { status: 200, body: { message: '时间更新成功' } };
 }
 
 async function syncMaterialInPlanned(db, orderId) {
