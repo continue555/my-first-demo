@@ -503,6 +503,13 @@ async function main() {
     token = oldToken;
     return r.status === 403 ? {} : { error: "expected 403, got " + r.status };
   });
+  await test("Purchase order date settable", async () => {
+    const timeRes = await req("PUT", `/api/orders/${createdOrderId}/stages/purchase_frame/time`, { order_date: "2026-08-07" });
+    if (timeRes.status !== 200) return { error: "order date set failed: " + JSON.stringify(timeRes.body) };
+    const r = await req("GET", `/api/orders/${createdOrderId}`);
+    const stage = (r.body.stages || []).find(s => s.stage_key === "purchase_frame");
+    return stage && stage.order_date === "2026-08-07" ? {} : { error: "order date not saved" };
+  });
   await test("Missing notification read returns 404", async () => {
     const r = await req("PUT", "/api/notifications/999999/read");
     return r.status === 404 ? {} : { error: "expected 404, got " + r.status };

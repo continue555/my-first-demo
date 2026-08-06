@@ -631,3 +631,31 @@ test('completion auto-fills next stage start from actual date', withNoopAudit(as
     database.getDb = original;
   }
 }));
+
+test('purchase stage accepts manual order date', async () => {
+  const fake = recordingDb({ stageFor: genericStage });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStageTime(admin, 1, 'purchase_frame', { order_date: '2026-08-07' });
+    assert.equal(r.status, 200);
+    const run = fake.runs.find(x => x.sql.includes('order_date'));
+    assert.ok(run);
+    assert.equal(run.params[2], '2026-08-07');
+  } finally {
+    database.getDb = original;
+  }
+});
+
+test('non-purchase stage rejects manual order date', async () => {
+  const fake = recordingDb({ stageFor: genericStage });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStageTime(admin, 1, 'contract_sign', { order_date: '2026-08-07' });
+    assert.equal(r.status, 400);
+    assert.ok(r.body.error.includes('采购'));
+  } finally {
+    database.getDb = original;
+  }
+});

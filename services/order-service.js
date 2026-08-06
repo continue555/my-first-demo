@@ -491,8 +491,13 @@ async function updateStageTime(user, id, stageKey, body) {
   const { start_date, planned_end_date } = body;
   const start = validateStageDateTime(start_date);
   const planned = validateStageDateTime(planned_end_date);
+  const orderDate = validateDate(body.order_date);
   if (!start.ok) return { status: 400, body: { error: start.error } };
   if (!planned.ok) return { status: 400, body: { error: planned.error } };
+  if (!orderDate.ok) return { status: 400, body: { error: orderDate.error } };
+  if (orderDate.value && !PURCHASE_STAGE_KEYS.includes(stageKey)) {
+    return { status: 400, body: { error: '仅采购节点可设置下单时间' } };
+  }
   const autoTimeStage = FULL_AUTO_STAGE_KEYS.has(stageKey);
   if (autoTimeStage && (start.value || planned.value)) {
     return {
@@ -528,9 +533,9 @@ async function updateStageTime(user, id, stageKey, body) {
   }
 
   await db.prepare(`
-    UPDATE process_stages SET start_date = COALESCE(?, start_date), planned_end_date = COALESCE(?, planned_end_date), planned_end_source = 'manual', updated_at = datetime('now', '+8 hours')
+    UPDATE process_stages SET start_date = COALESCE(?, start_date), planned_end_date = COALESCE(?, planned_end_date), order_date = COALESCE(?, order_date), planned_end_source = 'manual', updated_at = datetime('now', '+8 hours')
     WHERE order_id = ? AND stage_key = ?
-  `).run(start.value ?? null, planned.value ?? null, id, stageKey);
+  `).run(start.value ?? null, planned.value ?? null, orderDate.value ?? null, id, stageKey);
 
   // 采购计划到货时间变化时，自动同步采购跟进计划完成时间，并重算物料进仓计划完成时间
   if (PURCHASE_TO_FOLLOW_UP[stageKey] && planned.value) {

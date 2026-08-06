@@ -110,7 +110,8 @@
                   <div class="stage-name">→ {{ ps.stage_name }}<span v-if="getOverdueInfo(ps)" :class="getOverdueInfo(ps).stampClass">{{ getOverdueInfo(ps).stampText }}</span></div>
                   <div class="stage-dates">
                     <template v-if="isPurchaseStage(ps)">
-                      <span v-if="ps.start_date">下单时间: {{ fmtDate(ps.start_date) }}</span>
+                      <span v-if="ps.start_date">开始时间: {{ fmtDate(ps.start_date) }}</span>
+                      <span v-if="ps.order_date"> | 下单时间: {{ fmtDate(ps.order_date) }}</span>
                       <span v-if="ps.planned_end_date"> | 计划到货: {{ fmtDate(ps.planned_end_date) }}</span>
                       <span v-if="ps.actual_end_date"> | <span :class="getOverdueInfo(ps)?.cssClass">完成时间: {{ fmtDate(ps.actual_end_date) }}</span></span>
                     </template>
@@ -144,7 +145,8 @@
     <div v-if="timeModal.visible" class="modal-overlay" @click.self="timeModal.visible = false">
       <div class="modal">
         <h3>设置时间 - {{ timeModal.stageName }}</h3>
-        <div v-if="!timeModal.hideStart" class="form-group"><label>{{ timeModal.isPurchase ? '下单日期' : '开始日期' }}</label><input v-model="timeModal.startDate" type="date"></div>
+        <div v-if="!timeModal.hideStart" class="form-group"><label>开始日期</label><input v-model="timeModal.startDate" type="date"></div>
+        <div v-if="timeModal.isPurchase" class="form-group"><label>下单时间</label><input v-model="timeModal.orderDate" type="date"></div>
         <div class="form-group">
           <label>{{ timeModal.isPurchase ? '计划到货日期' : '计划完成日期' }}</label>
           <input v-model="timeModal.plannedEnd" type="date">
@@ -208,7 +210,7 @@ const stages = ref([]);
 const loading = ref(true);
 const loadError = ref('');
 
-const timeModal = ref({ visible: false, orderId: null, stageKey: '', stageName: '', startDate: '', plannedEnd: '' });
+const timeModal = ref({ visible: false, orderId: null, stageKey: '', stageName: '', startDate: '', plannedEnd: '', orderDate: '' });
 const files = ref([]);
 const uploading = ref(false);
 const uploadProgress = ref(0);
@@ -536,6 +538,7 @@ function showTimeModal(stage) {
   timeModal.value = {
     visible: true, orderId: order.value.id, stageKey: stage.stage_key,
     stageName: stage.stage_name, startDate: stage.start_date || '', plannedEnd: stage.planned_end_date || '',
+    orderDate: stage.order_date || '',
     isPurchase: isPurchaseStage(stage),
     hideStart: stage.stage_key !== 'contract_sign'
   };
@@ -551,7 +554,8 @@ function canSetTime(stage) {
 async function saveTime() {
   try {
     const data = await api.put(`/orders/${timeModal.value.orderId}/stages/${timeModal.value.stageKey}/time`, {
-      start_date: timeModal.value.startDate, planned_end_date: timeModal.value.plannedEnd
+      start_date: timeModal.value.startDate, planned_end_date: timeModal.value.plannedEnd,
+      order_date: timeModal.value.orderDate || null
     });
     toast.show('时间更新成功');
     if (data.warnings && data.warnings.length > 0) {
