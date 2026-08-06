@@ -79,7 +79,7 @@
             <div class="stage-info">
               <div class="stage-name">{{ s.stage_name }}<span v-if="getOverdueInfo(s)" :class="getOverdueInfo(s).stampClass">{{ getOverdueInfo(s).stampText }}</span></div>
               <div class="stage-dates">
-                <span v-if="s.start_date && s.stage_key !== 'delivery_payment'">开始: {{ fmtDate(s.start_date) }}</span>
+                      <span v-if="s.start_date && s.stage_key !== 'delivery_payment'">{{ s.status === 'pending' ? '计划开始' : '开始' }}: {{ fmtDate(s.start_date) }}</span>
                 <span v-if="s.planned_end_date"> | 计划完成: {{ fmtDate(s.planned_end_date) }}</span>
                 <span v-if="s.actual_end_date"> | <span :class="getOverdueInfo(s)?.cssClass">实际完成: {{ fmtDate(s.actual_end_date) }}</span></span>
                 <span v-if="s.operator_name"> | 操作人: {{ s.operator_name }}</span>
@@ -115,7 +115,7 @@
                       <span v-if="ps.actual_end_date"> | <span :class="getOverdueInfo(ps)?.cssClass">完成时间: {{ fmtDate(ps.actual_end_date) }}</span></span>
                     </template>
                     <template v-else>
-                      <span v-if="ps.start_date && !isFollowUpStage(ps) && ps.stage_key !== 'material_in'">开始: {{ fmtDate(ps.start_date) }}</span>
+                      <span v-if="ps.start_date && !isFollowUpStage(ps) && ps.stage_key !== 'material_in'">{{ ps.status === 'pending' ? '计划开始' : '开始' }}: {{ fmtDate(ps.start_date) }}</span>
                       <span v-if="ps.planned_end_date"> | 计划完成: {{ fmtDate(ps.planned_end_date) }}</span>
                       <span v-if="ps.actual_end_date"> | <span :class="getOverdueInfo(ps)?.cssClass">{{ isFollowUpStage(ps) ? '实际到货时间: ' + fmtDate(ps.actual_end_date) : '实际完成: ' + fmtDate(ps.actual_end_date) }}</span></span>
                     </template>

@@ -408,7 +408,7 @@ async function updateStage(user, id, stageKey, body) {
     }
 
     await db.prepare(`
-      UPDATE process_stages SET status = ?, start_date = COALESCE(start_date, ?), notes = COALESCE(?, notes), operator_id = ?, operator_name = ?, updated_at = datetime('now', '+8 hours')
+      UPDATE process_stages SET status = ?, start_date = ?, notes = COALESCE(?, notes), operator_id = ?, operator_name = ?, updated_at = datetime('now', '+8 hours')
       WHERE order_id = ? AND stage_key = ?
     `).run(status, autoStage ? null : now, notes ?? null, user.id, user.name, id, stageKey);
 

@@ -591,3 +591,23 @@ test('start blocked until dependency completed', async () => {
     database.getDb = original;
   }
 });
+
+test('start overwrites suggested start date with click time', withNoopAudit(async () => {
+  const fake = recordingDb({
+    stageFor: key => ({ ...genericStage(key), status: 'pending', start_date: '2026-08-17' }),
+    allStatuses: notAllDone
+  });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStage(admin, 1, 'contract_sign', { status: 'in_progress' });
+    assert.equal(r.status, 200);
+    const run = fake.runs.find(x => x.sql.includes('status = ?') && x.params.includes('in_progress'));
+    assert.ok(run);
+    const clickTime = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 16);
+    assert.equal(run.params[1], clickTime);
+    assert.ok(run.sql.includes('start_date = ?') && !run.sql.includes('COALESCE(start_date'));
+  } finally {
+    database.getDb = original;
+  }
+}));
