@@ -12,13 +12,18 @@ function dayDiff(from, to) {
 
 async function listNotifications(user, query) {
   const db = database.getDb();
-  const { unread, limit } = query;
+  const { unread, limit, order_id } = query;
   const rawLimit = parseInt(limit, 10);
-  const safeLimit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 200) : 50;
+  const safeLimit = Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, 500) : 50;
+  const rawOrderId = parseInt(order_id, 10);
   const userId = user.id;
 
   let where = 'WHERE 1=1';
   const params = [];
+  if (Number.isFinite(rawOrderId) && rawOrderId > 0) {
+    where += ' AND n.order_id = ?';
+    params.push(rawOrderId);
+  }
   if (unread === 'true') {
     where += ' AND NOT EXISTS (SELECT 1 FROM notification_reads nr WHERE nr.notification_id = n.id AND nr.user_id = ?)';
     params.push(userId);
@@ -39,6 +44,10 @@ async function listNotifications(user, query) {
 
   let unreadWhere = 'WHERE NOT EXISTS (SELECT 1 FROM notification_reads nr WHERE nr.notification_id = n.id AND nr.user_id = ?)';
   const unreadParams = [userId];
+  if (Number.isFinite(rawOrderId) && rawOrderId > 0) {
+    unreadWhere += ' AND n.order_id = ?';
+    unreadParams.push(rawOrderId);
+  }
   const unreadDeptFilter = await buildNotificationFilter(user, 'n');
   unreadWhere += unreadDeptFilter.sql;
   unreadParams.push(...unreadDeptFilter.params);

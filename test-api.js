@@ -377,7 +377,7 @@ async function main() {
     const oldToken = token;
     const login = await loginUser("zongjingli", "123456");
     if (!login.body.user) { token = oldToken; return { error: "login failed" }; }
-    const list = await req("GET", "/api/notifications?limit=500");
+    const list = await req("GET", `/api/notifications?order_id=${createdOrderId}&limit=200`);
     token = oldToken;
     const n = (list.body.notifications || []).find(x => x.order_id === createdOrderId && x.recipient_role === "management");
     return n && n.message.includes("总经理签字") ? {} : { error: "management notification missing" };
@@ -385,7 +385,7 @@ async function main() {
   await test("Non-management cannot see role notification", async () => {
     const oldToken = token;
     const jishu = await loginUser("jishu1", "123456");
-    const list = await req("GET", "/api/notifications?limit=500");
+    const list = await req("GET", `/api/notifications?order_id=${createdOrderId}&limit=200`);
     token = oldToken;
     const n = (list.body.notifications || []).find(x => x.order_id === createdOrderId && x.recipient_role === "management");
     return n ? { error: "role notification visible to non-management" } : {};
