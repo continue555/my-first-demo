@@ -90,15 +90,37 @@ async function shiftDownstreamForActual(db, orderId, stageKey, actualDate, plann
   const verb = delta > 0 ? `推迟 ${delta} 天` : `提前 ${Math.abs(delta)} 天`;
   const affected = [];
 
-  for (const row of rows) {
-    if (row.status !== 'pending' || row.planned_end_source === 'manual' || !row.planned_end_date) continue;
-    const nextPlanned = addDays(row.planned_end_date, delta);
-    const nextStart = row.start_date ? addDays(row.start_date, delta) : null;
-    await db.prepare(`
-      UPDATE process_stages SET start_date = ?, planned_end_date = ?, updated_at = datetime('now', '+8 hours')
-      WHERE order_id = ? AND stage_key = ?
-    `).run(nextStart, nextPlanned, orderId, row.stage_key);
-    affected.push({ row, nextPlanned });
+  if (delta > 0) {
+    for (const row of rows) {
+      if (row.status !== 'pending' || row.planned_end_source === 'manual' || !row.planned_end_date) continue;
+      const nextPlanned = addDays(row.planned_end_date, delta);
+      const nextStart = row.start_date ? addDays(row.start_date, delta) : null;
+      await db.prepare(`
+        UPDATE process_stages SET start_date = ?, planned_end_date = ?, updated_at = datetime('now', '+8 hours')
+        WHERE order_id = ? AND stage_key = ?
+      `).run(nextStart, nextPlanned, orderId, row.stage_key);
+      affected.push({ row, nextPlanned });
+    }
+  } else {
+    // 提前完成：以实际完成日为锚点前向重算下游，避免把计划拉到早于当天
+    const allRows = await db.prepare(
+      'SELECT stage_key, start_date, planned_end_date FROM process_stages WHERE order_id = ?'
+    ).all(orderId);
+    const dates = {};
+    for (const r of allRows) dates[r.stage_key] = { start_date: r.start_date, planned_end_date: r.planned_end_date };
+    dates[stageKey] = { start_date: null, planned_end_date: actualDate };
+    const suggestions = computeDownstreamSuggestions(STAGE_DEFINITIONS, dates, stageKey, actualDate);
+    const suggestedMap = new Map(suggestions.map(s => [s.stage_key, s]));
+    for (const row of rows) {
+      if (row.status !== 'pending' || row.planned_end_source === 'manual' || !row.planned_end_date) continue;
+      const sug = suggestedMap.get(row.stage_key);
+      if (!sug || row.planned_end_date.slice(0, 10) <= sug.suggested_end) continue;
+      await db.prepare(`
+        UPDATE process_stages SET start_date = ?, planned_end_date = ?, updated_at = datetime('now', '+8 hours')
+        WHERE order_id = ? AND stage_key = ?
+      `).run(sug.suggested_start, sug.suggested_end, orderId, row.stage_key);
+      affected.push({ row, nextPlanned: sug.suggested_end });
+    }
   }
 
   const byRecipient = new Map();

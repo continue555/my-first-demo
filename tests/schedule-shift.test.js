@@ -78,13 +78,25 @@ test('late completion pushes pending auto downstream by same days', async () => 
 });
 
 test('early completion pulls pending auto downstream earlier', async () => {
-  const db = fakeDb({ stages: baseStages() });
+  const stages = baseStages();
+  stages[1] = { ...stages[1], start_date: '2026-09-05', planned_end_date: '2026-09-06' };
+  stages[2] = { ...stages[2], start_date: '2026-09-06', planned_end_date: '2026-09-11' };
+  stages[3] = { ...stages[3], start_date: '2026-09-11', planned_end_date: '2026-09-14' };
+  const db = fakeDb({ stages });
   await withDb(db, async () => {
-    const r = await shiftDownstreamForActual(db, 1, 'material_in', '2026-07-30', '2026-08-01', { type: 'completion' });
+    const r = await shiftDownstreamForActual(db, 1, 'material_in', '2026-08-06', '2026-09-05', { type: 'completion' });
     assert.equal(r.shifted, 3);
     const warehouseRun = db.runs.find(x => x.params.includes('warehouse_prepare') && x.sql.includes('UPDATE process_stages'));
-    assert.equal(warehouseRun.params[0], '2026-07-31');
-    assert.equal(warehouseRun.params[1], '2026-08-01');
+    const assemblyRun = db.runs.find(x => x.params.includes('assembly') && x.sql.includes('UPDATE process_stages'));
+    const debugRun = db.runs.find(x => x.params.includes('debug') && x.sql.includes('UPDATE process_stages'));
+    assert.equal(warehouseRun.params[0], '2026-08-06');
+    assert.equal(warehouseRun.params[1], '2026-08-07');
+    assert.equal(assemblyRun.params[1], '2026-08-12');
+    assert.equal(debugRun.params[1], '2026-08-15');
+    const updates = db.runs.filter(x => x.sql.includes('UPDATE process_stages'));
+    for (const u of updates) {
+      assert.ok(u.params[1] >= '2026-08-06', 'downstream planned date before anchor');
+    }
   });
 });
 
