@@ -193,14 +193,30 @@ async function getOrderId(page, orderNo) {
     await page.locator('.page-header .btn-primary').click();
     await page.waitForSelector('.modal', { timeout: 10000 });
     await page.locator('.modal input[type=text]').fill(overdueNo);
-    await page.locator('.modal input[type=date]').fill('2020-01-01');
+    await page.locator('.modal input[type=date]').fill('2026-09-30');
     await page.locator('.modal .modal-actions .btn-primary').click();
     await page.waitForSelector('.modal', { state: 'detached', timeout: 15000 }).catch(() => {});
     await page.waitForSelector('.table-wrapper', { timeout: 30000 });
     const row = page.locator('tbody tr', { hasText: overdueNo });
     if ((await row.count()) === 0) throw new Error('overdue order row missing');
-    if (!(await row.innerText()).includes('超期')) throw new Error('orders list overdue stamp missing');
     await row.locator('button').first().click();
+    await page.waitForSelector('.detail-grid', { timeout: 30000 });
+    const orderId = new URL(page.url()).pathname.split('/').pop();
+    if (!/^\d+$/.test(orderId)) throw new Error('cannot resolve order id: ' + page.url());
+    await page.evaluate(async id => {
+      const csrf = decodeURIComponent((document.cookie.match(/(?:^|; )csrf=([^;]*)/) || [])[1] || '');
+      await fetch('/api/orders/' + id + '/stages/contract_sign/time', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+        body: JSON.stringify({ start_date: '2020-01-01', planned_end_date: '2020-01-02' })
+      });
+    }, orderId);
+    await page.goto(BASE + '/orders', { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.waitForSelector('tbody tr', { timeout: 30000 });
+    const overdueRow = page.locator('tbody tr', { hasText: overdueNo });
+    if ((await overdueRow.count()) === 0) throw new Error('overdue order row missing');
+    if (!(await overdueRow.innerText()).includes('超期')) throw new Error('orders list overdue stamp missing');
+    await overdueRow.locator('button').first().click();
     await page.waitForSelector('.detail-grid', { timeout: 30000 });
     if (!(await page.locator('.detail-grid').innerText()).includes('当前节点超期')) {
       throw new Error('detail overdue badge missing');
