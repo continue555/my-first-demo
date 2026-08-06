@@ -21,7 +21,10 @@
       <div class="dashboard-card">
         <div class="dashboard-card-header">
           <span class="dash-title">最近订单</span>
-          <span class="dash-link" @click="navigateTo('/orders')">查看全部 →</span>
+          <span style="display:flex;gap:12px;">
+            <span class="dash-link" @click="navigateTo('/todos')">我的待办 →</span>
+            <span class="dash-link" @click="navigateTo('/orders')">查看全部 →</span>
+          </span>
         </div>
         <div class="dashboard-card-body">
           <div v-if="recentOrders === null" class="dash-empty" style="visibility:hidden">暂无订单</div>
@@ -38,6 +41,7 @@
                 {{ o.order_no }}
                 <span v-if="getOverdueInfo(o)" :class="getOverdueInfo(o).stampClass">{{ getOverdueInfo(o).stampText }}</span>
               </div>
+              <div class="dash-order-stage">当前节点：{{ o.current_stage?.stage_name || '已完成' }}<span v-if="o.current_stage?.overdue" class="overdue-red-stamp">超期</span></div>
             </div>
             <span class="status-badge" :class="'status-' + o.status">{{ statusText(o.status) }}</span>
             <div class="dash-order-progress">
@@ -163,6 +167,7 @@ onUnmounted(() => {
 .dash-order-row:hover { background: #f8fafc; }
 .dash-order-info { flex: 1; min-width: 0; }
 .dash-order-no { font-size: 13px; font-weight: 600; }
+.dash-order-stage { font-size: 12px; color: #6b7280; margin-top: 3px; }
 .dash-order-progress { width: 90px; flex-shrink: 0; }
 .progress-bar-bg { height: 6px; background: #e5e7eb; border-radius: 3px; overflow: hidden; }
 .progress-bar-fill { height: 100%; background: #0d9488; border-radius: 3px; transition: width 0.3s; }

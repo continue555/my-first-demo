@@ -135,3 +135,7 @@ export async function getFilePreviewTicket(fileId) {
   const data = await api.get(`/files/${fileId}/ticket`);
   return data.url;
 }
+
+export async function getTodos() {
+  return api.get('/todos');
+}

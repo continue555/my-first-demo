@@ -3,7 +3,7 @@ const http = require("http");
 const STAGE_DEFINITIONS = require("./shared/stage-defs.json");
 const ExcelJS = require("exceljs");
 const BASE = "http://localhost:3000";
-let passed = 0, failed = 0, token = "", createdOrderId = null, roleOrderId = null, testFileId = null;
+let passed = 0, failed = 0, token = "", createdOrderId = null, roleOrderId = null, todoOrderId = null, testFileId = null;
 
 function req(method, path, body) {
   return new Promise((resolve, reject) => {
@@ -130,6 +130,14 @@ async function main() {
   await test("Stats", async () => { const r = await req("GET", "/api/orders/stats"); return r.body.stats ? {} : { error: "no stats" }; });
   await test("Stats has overdue and no cancelled", async () => { const r = await req("GET", "/api/orders/stats"); return !("cancelled" in r.body.stats) && typeof r.body.stats.overdue === "number" ? {} : { error: "stats mismatch" }; });
   await test("Orders list", async () => { const r = await req("GET", "/api/orders?limit=3"); return r.body.orders ? {} : { error: "no orders" }; });
+  await test("Orders list has current stage", async () => {
+    const r = await req("GET", "/api/orders?limit=10");
+    const orders = r.body.orders || [];
+    if (orders.length === 0) return { error: "no orders" };
+    const allHave = orders.every(o => "current_stage" in o);
+    const sample = orders.find(o => o.current_stage && o.current_stage.stage_name);
+    return allHave && sample ? {} : { error: "current_stage missing" };
+  });
   const customNo = "TEST-" + Date.now();
   const autoTimeStages = new Set([
     "frame_follow_up", "mold_frame_follow_up", "electrical_follow_up",
@@ -247,6 +255,42 @@ async function main() {
     } catch (e) {
       return { error: e.message };
     }
+  });
+  await test("Todo order lifecycle", async () => {
+    const orderNo = "TODO-" + Date.now();
+    const created = await req("POST", "/api/orders", { order_no: orderNo, customer_name: "TodoTest", project_name: "TodoTest", planned_delivery_date: "2026-08-10" });
+    if (created.status !== 201 || !created.body.orderId) return { error: "todo order create failed" };
+    todoOrderId = created.body.orderId;
+
+    const adminTodos = await req("GET", "/api/todos");
+    const adminItem = (adminTodos.body.todos || []).find(t => t.order_id === todoOrderId);
+    if (!adminItem || adminItem.category !== "ready" || adminItem.stage_name !== "签订合同") {
+      return { error: "admin todo missing ready item: " + JSON.stringify(adminTodos.body) };
+    }
+
+    const oldToken = token;
+    await loginUser("jishu1", "123456");
+    const techTodos = await req("GET", "/api/todos");
+    token = oldToken;
+    if ((techTodos.body.todos || []).some(t => t.order_id === todoOrderId)) {
+      return { error: "tech user saw out-of-dept todo" };
+    }
+
+    const timeRes = await req("PUT", `/api/orders/${todoOrderId}/stages/contract_sign/time`, { start_date: "2026-08-01T09:00", planned_end_date: "2026-08-02T09:00" });
+    const s1 = await req("PUT", `/api/orders/${todoOrderId}/stages/contract_sign`, { status: "in_progress" });
+    const s2 = await req("PUT", `/api/orders/${todoOrderId}/stages/contract_sign`, { status: "completed" });
+    if (timeRes.status !== 200 || s1.status !== 200 || s2.status !== 200) {
+      return { error: "contract sign advance failed" };
+    }
+
+    await loginUser("caiwu1", "123456");
+    const financeTodos = await req("GET", "/api/todos");
+    token = oldToken;
+    const financeItem = (financeTodos.body.todos || []).find(t => t.order_id === todoOrderId);
+    if (!financeItem || financeItem.category !== "ready" || financeItem.stage_name !== "财务确认定金") {
+      return { error: "finance todo missing deposit item: " + JSON.stringify(financeTodos.body) };
+    }
+    return {};
   });
   await test("Attachment upload and preview", async () => {
     const filename = "\u6d4b\u8bd5\u9644\u4ef6.txt";
@@ -491,7 +535,7 @@ async function main() {
     return r.status === 404 ? {} : { error: "expected 404, got " + r.status };
   });
 
-  const testOrderIds = new Set([createdOrderId, roleOrderId].filter(Boolean));
+  const testOrderIds = new Set([createdOrderId, roleOrderId, todoOrderId].filter(Boolean));
   if (process.env.SKIP_CLEANUP === '1') {
     console.log("[cleanup] skipped (SKIP_CLEANUP=1)");
   } else {

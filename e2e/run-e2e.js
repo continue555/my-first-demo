@@ -79,7 +79,14 @@ async function runMobileFlow(page, label) {
   await page.waitForTimeout(800);
   await assertNoHorizontalOverflow(page);
 
-  await page.locator('.mb-nav-item').nth(3).click();
+  await page.locator('.mb-nav-item', { hasText: '待办' }).click();
+  await page.waitForURL(/\/todos$/, { timeout: 15000 });
+  await page.waitForTimeout(800);
+  await assertNoHorizontalOverflow(page);
+  await page.goto(BASE + '/orders', { waitUntil: 'domcontentloaded', timeout: 45000 });
+  await page.waitForSelector('.order-card', { timeout: 30000 });
+
+  await page.locator('.mb-nav-item').nth(4).click();
   await page.waitForSelector('.mobile-more-sheet', { timeout: 10000 });
   const count = await page.locator('.mobile-more-item').count();
   if (count !== 5) throw new Error(label + ': expected 5 more items, got ' + count);
@@ -155,6 +162,28 @@ async function getOrderId(page, orderNo) {
     await page.waitForSelector('.detail-grid', { timeout: 30000 });
     await page.goBack({ timeout: 30000 });
     await page.waitForSelector('.table-wrapper', { timeout: 30000 });
+  });
+
+  await check('orders list shows current stage', async () => {
+    await page.goto(BASE + '/orders', { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.waitForSelector('tbody tr', { timeout: 30000 });
+    const row = page.locator('tbody tr', { hasText: orderNo });
+    if ((await row.count()) === 0) throw new Error('order row missing');
+    const text = await row.innerText();
+    if (!text.includes('签订合同')) throw new Error('current stage not shown: ' + text.slice(0, 200));
+  });
+
+  await check('todo page shows current node and navigates to detail', async () => {
+    await page.goto(BASE + '/todos', { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.waitForSelector('.todo-item', { timeout: 30000 });
+    const row = page.locator('.todo-item', { hasText: orderNo });
+    if ((await row.count()) === 0) throw new Error('todo row missing');
+    const text = await row.innerText();
+    if (!text.includes('签订合同')) throw new Error('todo current stage missing: ' + text.slice(0, 200));
+    await row.click();
+    await page.waitForSelector('.detail-grid', { timeout: 30000 });
+    const path = new URL(page.url()).pathname;
+    if (!/^\/orders\/\d+$/.test(path)) throw new Error('todo did not navigate to detail: ' + path);
   });
 
   await check('upload attachment and preview via UI', async () => {

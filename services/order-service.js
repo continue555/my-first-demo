@@ -6,6 +6,7 @@ function logAudit(...args) { return database.logAudit(...args); }
 const STAGE_DEFINITIONS = require('../shared/stage-defs.json');
 const sanitize = require('../lib/sanitize');
 const { canOperateStage } = require('../lib/stage-permissions');
+const { buildCurrentStage } = require('../lib/current-stage');
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 
 const ORDER_STATUSES = ['pending', 'in_progress', 'completed'];
@@ -185,11 +186,17 @@ async function listOrders(query) {
   // 获取每个订单的流程进度
   const ordersWithProgress = await Promise.all(orders.map(async (order) => {
     const stages = await db.prepare(
-      'SELECT stage_key, status FROM process_stages WHERE order_id = ?'
+      `SELECT ps.stage_key, ps.stage_name, ps.stage_order, ps.department_id, ps.status,
+              ps.start_date, ps.planned_end_date, ps.actual_end_date, d.name AS dept_name
+       FROM process_stages ps
+       LEFT JOIN departments d ON ps.department_id = d.id
+       WHERE ps.order_id = ?
+       ORDER BY ps.stage_order`
     ).all(order.id);
     const completedCount = stages.filter(s => s.status === 'completed').length;
     const totalStages = STAGE_DEFINITIONS.length;
     order.progress = Math.round((completedCount / totalStages) * 100);
+    order.current_stage = buildCurrentStage(stages);
     return order;
   }));
 

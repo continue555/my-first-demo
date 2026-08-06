@@ -73,6 +73,7 @@ app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 app.use('/api/auth', require('./routes/auth'));
 app.use('/api/departments', require('./routes/departments'));
 app.use('/api/orders', require('./routes/orders').router);
+app.use('/api/todos', require('./routes/todos'));
 app.use('/api/notifications', require('./routes/notifications'));
 app.use('/api/export', exportRoutes.router);
 app.use('/api/audit', require('./routes/audit'));

@@ -9,6 +9,7 @@ const routes = [
     children: [
       { path: '', name: 'Dashboard', component: () => import('@/views/Dashboard.vue') },
       { path: 'orders', name: 'Orders', component: () => import('@/views/Orders.vue') },
+      { path: 'todos', name: 'Todos', component: () => import('@/views/Todos.vue') },
       { path: 'orders/:id', name: 'OrderDetail', component: () => import('@/views/OrderDetail.vue') },
       { path: 'export', name: 'Export', component: () => import('@/views/Export.vue'), meta: { adminOrManagement: true } },
       { path: 'notifications', name: 'Notifications', component: () => import('@/views/Notifications.vue') },

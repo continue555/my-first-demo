@@ -3,6 +3,7 @@
     <div class="page-header">
       <h2>订单管理</h2>
       <div class="actions">
+        <button class="btn btn-outline" @click="goTodos">我的待办</button>
         <button v-if="auth.canManageOrders" class="btn btn-primary" @click="showCreate = true">+ 新建订单</button>
       </div>
     </div>
@@ -43,6 +44,7 @@
               <span class="status-badge" :class="'status-' + o.status">{{ statusText(o.status) }}</span>
             </div>
             <div class="order-card-meta">计划交货：{{ o.planned_delivery_date || '-' }}</div>
+            <div class="order-card-meta">当前节点：{{ o.current_stage?.stage_name || '已完成' }}<span v-if="o.current_stage?.overdue" class="overdue-red-stamp">超期</span></div>
             <div class="order-card-progress">
               <div class="progress-bar-bg"><div class="progress-bar-fill" :style="{ width: (o.progress || 0) + '%' }"></div></div>
               <span>{{ o.progress || 0 }}%</span>
@@ -58,7 +60,7 @@
             <thead>
               <tr>
                 <th style="width:30px;"><input type="checkbox" class="batch-checkbox" :checked="allSelected" @change="toggleSelectAll"></th>
-                <th>订单编号</th><th>计划交货</th><th>状态</th><th>进度</th><th>操作</th>
+                <th>订单编号</th><th>计划交货</th><th>状态</th><th>当前节点</th><th>进度</th><th>操作</th>
               </tr>
             </thead>
             <tbody>
@@ -70,6 +72,10 @@
                 </td>
                 <td>{{ o.planned_delivery_date || '-' }}</td>
                 <td><span class="status-badge" :class="'status-' + o.status">{{ statusText(o.status) }}</span></td>
+                <td>
+                  <span>{{ o.current_stage?.stage_name || '已完成' }}</span>
+                  <span v-if="o.current_stage?.overdue" class="overdue-red-stamp">超期</span>
+                </td>
                 <td>
                   <div class="progress-bar-bg"><div class="progress-bar-fill" :style="{ width: (o.progress || 0) + '%' }"></div></div>
                   <span style="font-size:11px;color:var(--text-secondary)">{{ o.progress || 0 }}%</span>
@@ -181,6 +187,10 @@ async function loadOrders(p = 1) {
 
 function goDetail(id) {
   navigateTo(`/orders/${id}`);
+}
+
+function goTodos() {
+  navigateTo('/todos');
 }
 
 async function createOrder() {
