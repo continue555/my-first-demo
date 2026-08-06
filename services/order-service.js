@@ -372,7 +372,8 @@ async function updateStage(user, id, stageKey, body) {
 
   // 如果改为进行中，检查前置依赖
   if (status === 'in_progress') {
-    if (stage.status === 'pending' && (!stage.planned_end_date || (!autoStage && !stage.start_date))) {
+    const canStartBeforePlan = stageKey === 'mold_design_purchase';
+    if (stage.status === 'pending' && !canStartBeforePlan && (!stage.planned_end_date || (!autoStage && !stage.start_date))) {
       const error = stageKey === DELIVERY_PAYMENT_KEY
         ? '请先设置计划完成日期'
         : autoStage

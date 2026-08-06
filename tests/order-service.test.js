@@ -659,3 +659,20 @@ test('non-purchase stage rejects manual order date', async () => {
     database.getDb = original;
   }
 });
+
+test('mold design stage can start without planned end date', withNoopAudit(async () => {
+  const fake = recordingDb({
+    stageFor: key => key === 'purchase_plan'
+      ? { ...genericStage(key), status: 'completed' }
+      : { ...genericStage(key), status: 'pending', start_date: null, planned_end_date: null },
+    allStatuses: notAllDone
+  });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStage(admin, 1, 'mold_design_purchase', { status: 'in_progress' });
+    assert.equal(r.status, 200);
+  } finally {
+    database.getDb = original;
+  }
+}));
