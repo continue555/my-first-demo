@@ -131,12 +131,14 @@ async function main() {
   await test("Stats has overdue and no cancelled", async () => { const r = await req("GET", "/api/orders/stats"); return !("cancelled" in r.body.stats) && typeof r.body.stats.overdue === "number" ? {} : { error: "stats mismatch" }; });
   await test("Orders list", async () => { const r = await req("GET", "/api/orders?limit=3"); return r.body.orders ? {} : { error: "no orders" }; });
   await test("Orders list has current stage", async () => {
-    const r = await req("GET", "/api/orders?limit=10");
-    const orders = r.body.orders || [];
-    if (orders.length === 0) return { error: "no orders" };
-    const allHave = orders.every(o => "current_stage" in o);
-    const sample = orders.find(o => o.current_stage && o.current_stage.stage_name);
-    return allHave && sample ? {} : { error: "current_stage missing" };
+    const orderNo = "CUR-" + Date.now();
+    const created = await req("POST", "/api/orders", { order_no: orderNo, customer_name: "CurTest", project_name: "CurTest", planned_delivery_date: "2026-08-10" });
+    if (created.status !== 201 || !created.body.orderId) return { error: "current stage order create failed" };
+    const list = await req("GET", `/api/orders?search=${encodeURIComponent(orderNo)}`);
+    const row = (list.body.orders || []).find(o => o.id === created.body.orderId);
+    const ok = row && row.current_stage && row.current_stage.stage_name === "签订合同" && typeof row.progress === "number";
+    await req("DELETE", `/api/orders/${created.body.orderId}`).catch(() => {});
+    return ok ? {} : { error: "current_stage missing" };
   });
   const customNo = "TEST-" + Date.now();
   const autoTimeStages = new Set([
