@@ -24,7 +24,7 @@ jobs:
           --health-retries 5
     env:
       PORT: 3000
-      JWT_SECRET: 61d0ae79ba91c14561b0806e5700e732c6d0d81f02495f3ca5aa758b4f57944f
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
       PG_HOST: 127.0.0.1
       PG_PORT: 5432
       PG_DATABASE: blowing_machine
@@ -78,7 +78,7 @@ jobs:
           --health-retries 5
     env:
       PORT: 3000
-      JWT_SECRET: 61d0ae79ba91c14561b0806e5700e732c6d0d81f02495f3ca5aa758b4f57944f
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
       PG_HOST: 127.0.0.1
       PG_PORT: 5432
       PG_DATABASE: blowing_machine
@@ -148,7 +148,7 @@ jobs:
           --health-retries 5
     env:
       PORT: 3000
-      JWT_SECRET: 61d0ae79ba91c14561b0806e5700e732c6d0d81f02495f3ca5aa758b4f57944f
+      JWT_SECRET: ${{ secrets.JWT_SECRET }}
       PG_HOST: 127.0.0.1
       PG_PORT: 5432
       PG_DATABASE: blowing_machine
