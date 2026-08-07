@@ -210,7 +210,6 @@ async function createOrder() {
       project_name: orderNo,
       product_model: '',
       quantity: 1,
-      contract_amount: null,
       planned_delivery_date: newOrder.value.planned_delivery_date || null,
       notes: ''
     };

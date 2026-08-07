@@ -204,6 +204,15 @@ async function main() {
     return r.status === 400 ? {} : { error: "expected 400, got " + r.status };
   });
   await test("Order detail (23 stages)", async () => { const r = await req("GET", `/api/orders/${createdOrderId}`); return r.body.stages && r.body.stages.length === 23 ? {} : { error: "expected 23 stages" }; });
+  await test("Amount fields removed from API", async () => {
+    const detail = await req("GET", `/api/orders/${createdOrderId}`);
+    const list = await req("GET", "/api/orders?limit=5");
+    const noAmount = obj => !obj || !("contract_amount" in obj);
+    const listOk = (list.body.orders || []).every(noAmount);
+    return detail.body.order && noAmount(detail.body.order) && listOk
+      ? {}
+      : { error: "contract_amount still exposed" };
+  });
   await test("Debug stage renamed to 调试验收", async () => {
     const r = await req("GET", `/api/orders/${createdOrderId}`);
     const stage = (r.body.stages || []).find(s => s.stage_key === "debug");

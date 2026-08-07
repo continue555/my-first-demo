@@ -80,13 +80,6 @@ function validateOrderInput(body, create) {
     }
     data.quantity = quantity;
   }
-  if (has('contract_amount')) {
-    const amount = body.contract_amount === '' || body.contract_amount === null ? null : Number(body.contract_amount);
-    if (amount !== null && (!Number.isFinite(amount) || amount < 0 || amount > 1000000000000)) {
-      return { error: '合同金额必须是非负数' };
-    }
-    data.contract_amount = amount;
-  }
   if (create || has('planned_delivery_date')) {
     const date = validateDate(body.planned_delivery_date);
     if (!date.ok) return { error: date.error };
@@ -243,9 +236,9 @@ async function createOrder(user, body) {
   let result;
   try {
     result = await db.prepare(`
-      INSERT INTO orders (order_no, customer_name, project_name, product_model, quantity, contract_amount, planned_delivery_date, status, notes, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
-    `).run(orderNo, v.customer_name, v.project_name, v.product_model ?? null, v.quantity ?? 1, v.contract_amount ?? null, v.planned_delivery_date ?? null, v.notes ?? null, user.id);
+      INSERT INTO orders (order_no, customer_name, project_name, product_model, quantity, planned_delivery_date, status, notes, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)
+    `).run(orderNo, v.customer_name, v.project_name, v.product_model ?? null, v.quantity ?? 1, v.planned_delivery_date ?? null, v.notes ?? null, user.id);
   } catch (e) {
     if (e && e.code === '23505') {
       return { status: 400, body: { error: '订单编号已存在' } };
@@ -309,14 +302,13 @@ async function updateOrder(user, id, body) {
       project_name = COALESCE(?, project_name),
       product_model = COALESCE(?, product_model),
       quantity = COALESCE(?, quantity),
-      contract_amount = COALESCE(?, contract_amount),
       planned_delivery_date = COALESCE(?, planned_delivery_date),
       actual_delivery_date = COALESCE(?, actual_delivery_date),
       status = COALESCE(?, status),
       notes = COALESCE(?, notes),
       updated_at = datetime('now', '+8 hours')
     WHERE id = ?
-  `).run(v.customer_name ?? null, v.project_name ?? null, v.product_model ?? null, v.quantity ?? null, v.contract_amount ?? null, v.planned_delivery_date ?? null, v.actual_delivery_date ?? null, v.status ?? null, v.notes ?? null, id);
+  `).run(v.customer_name ?? null, v.project_name ?? null, v.product_model ?? null, v.quantity ?? null, v.planned_delivery_date ?? null, v.actual_delivery_date ?? null, v.status ?? null, v.notes ?? null, id);
 
   await logAudit(user.id, user.name, "编辑订单", "order", parseInt(id), `订单编号: ${order.order_no}`);
 

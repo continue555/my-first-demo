@@ -6,7 +6,7 @@ const { buildSingleOrderWorkbook } = require('../services/export-service');
 test('single order workbook contains order, stages and attachments', async () => {
   const order = {
     order_no: 'ORD-2026-0001', customer_name: '客户甲', project_name: '项目乙',
-    product_model: 'CM-01', quantity: 2, contract_amount: 100000,
+    product_model: 'CM-01', quantity: 2,
     planned_delivery_date: '2026-08-01', actual_delivery_date: null,
     status: 'pending', creator_name: '管理员', created_at: '2026-08-01T09:00:00', notes: '备注内容'
   };
