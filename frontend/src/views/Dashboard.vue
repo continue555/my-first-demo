@@ -88,9 +88,11 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue';
 import { api } from '@/api';
+import { useToastStore } from '@/stores/toast';
 import { getOverdueInfo, statusText } from '@/utils';
 import { navigateTo } from '@/utils/navigation';
 
+const toast = useToastStore();
 const stats = ref({ total: 0, inProgress: 0, completed: 0, overdue: 0, pending: 0 });
 const recentOrders = ref(null);
 const recentNotifs = ref(null);
@@ -109,7 +111,9 @@ async function loadData() {
     stats.value = { total: s.total, inProgress: s.inProgress, completed: s.completed, overdue: s.overdue, pending: s.pending };
     recentOrders.value = orderData.orders || [];
     recentNotifs.value = notifData.notifications || [];
-  } catch { /* ignore */ }
+  } catch (e) {
+    toast.show(e.message || '加载失败，请重试', 'error');
+  }
 }
 
 function goDetail(id) {

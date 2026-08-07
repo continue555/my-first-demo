@@ -571,6 +571,7 @@ test('order completes only when all stages completed', withNoopAudit(async () =>
     const orderDone = fake.runs.find(x => x.sql.includes("status = 'completed'") && x.sql.includes('UPDATE orders'));
     assert.ok(orderDone);
     assert.ok(orderDone.params[0]);
+    assert.ok(orderDone.sql.includes('SELECT COUNT(*) FROM process_stages'));
   } finally {
     database.getDb = original;
   }

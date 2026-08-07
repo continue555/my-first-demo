@@ -16,21 +16,23 @@ export function buildShiftSummary(items) {
 // 顺延/提前通知按“同一订单 + 同一节点 + 同一日期事件”折叠，其余通知保持单条
 export function groupNotifications(list) {
   const groups = [];
-  let current = null;
+  const groupByKey = new Map();
   for (const n of list || []) {
     const key = shiftGroupKey(n);
-    if (key && current && current.key === key) {
-      current.items.push(n);
-      current.allRead = current.allRead && !!n.is_read;
-      current.summary = buildShiftSummary(current.items);
+    if (key && groupByKey.has(key)) {
+      const group = groupByKey.get(key);
+      group.items.push(n);
+      group.allRead = group.allRead && !!n.is_read;
+      group.summary = buildShiftSummary(group.items);
       continue;
     }
     if (key) {
-      current = { key, type: 'shift', items: [n], allRead: !!n.is_read, summary: buildShiftSummary([n]) };
+      const group = { key, type: 'shift', items: [n], allRead: !!n.is_read, summary: buildShiftSummary([n]) };
+      groupByKey.set(key, group);
+      groups.push(group);
     } else {
-      current = { key: `id:${n.id}`, type: 'single', items: [n], allRead: !!n.is_read };
+      groups.push({ key: `id:${n.id}`, type: 'single', items: [n], allRead: !!n.is_read });
     }
-    groups.push(current);
   }
   return groups;
 }

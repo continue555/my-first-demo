@@ -88,6 +88,7 @@ async function changePassword(userId, body) {
 
   const db = getDb();
   const user = await db.prepare('SELECT * FROM users WHERE id = ?').get(userId);
+  if (!user) return { status: 404, body: { error: '用户不存在' } };
   if (!bcrypt.compareSync(oldPassword, user.password)) return { status: 400, body: { error: '原密码不正确' } };
   const hash = bcrypt.hashSync(newPassword, 10);
   await db.prepare('UPDATE users SET password = ? WHERE id = ?').run(hash, userId);

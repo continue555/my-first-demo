@@ -73,6 +73,13 @@ async function processExportJob(job) {
   } catch (e) {
     job.status = 'error';
     job.error = e.message;
+    console.error(JSON.stringify({
+      ts: new Date().toISOString(),
+      level: 'error',
+      message: '导出任务失败',
+      jobId: job.id,
+      error: e.message
+    }));
   }
   saveExportJobs();
 }
@@ -577,7 +584,7 @@ async function runSingleOrderExport({ id, downloadBase, userId }) {
   const buf = await wb.xlsx.writeBuffer();
   return {
     status: 200,
-    xlsx: { buffer: buf, filename: `order_${order.order_no}.xlsx` }
+    xlsx: { buffer: buf, filename: `order_${String(order.order_no).replace(/[\r\n]+/g, '')}.xlsx` }
   };
 }
 
@@ -611,7 +618,7 @@ async function getExportJob(id) {
     status: 200,
     body: {
       status: job.status,
-      error: job.error || null,
+      error: job.error ? '导出失败，请重试' : null,
       downloadUrl: job.status === 'done' ? `/api/export/jobs/${job.id}/download` : null
     }
   };

@@ -128,7 +128,7 @@ app.use((err, req, res, next) => {
     message: err.message || String(err),
     stack: err.stack
   }));
-  res.status(err.status || 500).json({ error: err.message || '服务器内部错误' });
+  res.status(err.status || 500).json({ error: '服务器内部错误' });
 });
 
 // 异步初始化数据库后启动服务器
@@ -137,7 +137,6 @@ async function start() {
   exportService.loadExportJobs();
   app.listen(PORT, () => {
     console.log(`服务器已启动: http://localhost:${PORT}`);
-    console.log(`默认账号: admin / 123456`);
   });
 }
 

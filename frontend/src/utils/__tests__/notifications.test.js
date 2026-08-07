@@ -36,6 +36,18 @@ describe('notification grouping', () => {
     expect(groups[0].type).toBe('single');
   });
 
+  it('merges same event even when other notifications sit between', () => {
+    const list = [
+      shift(1, 'gm_sign', '2026-08-06', 3, 10),
+      { id: 20, message: '中间通知', source_key: 'stage_completed:1:contract_sign:dept:1', is_read: 0 },
+      shift(1, 'gm_sign', '2026-08-06', 5, 11)
+    ];
+    const groups = groupNotifications(list);
+    const shiftGroups = groups.filter(g => g.type === 'shift');
+    expect(shiftGroups.length).toBe(1);
+    expect(shiftGroups[0].items.length).toBe(2);
+  });
+
   it('computes group read state from all children', () => {
     const list = [
       shift(1, 'gm_sign', '2026-08-06', 3, 10, 0),

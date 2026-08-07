@@ -13,10 +13,11 @@ function applyCookies(res, result) {
 }
 
 router.post('/login', async (req, res) => {
+  const ip = req.headers['x-real-ip'] || req.ip || req.connection.remoteAddress || 'unknown';
   const result = await authService.login({
     username: req.body.username,
     password: req.body.password,
-    ip: req.ip || req.connection.remoteAddress || 'unknown',
+    ip,
     secure: req.secure
   });
   applyCookies(res, result);

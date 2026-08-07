@@ -464,12 +464,13 @@ async function updateStage(user, id, stageKey, body) {
       `).run(now.slice(0, 10), id);
     }
 
-    // 检查是否所有阶段都完成
-    const allStages = await db.prepare('SELECT status FROM process_stages WHERE order_id = ?').all(id);
-    const allDone = allStages.every(s => s.status === 'completed');
-    if (allDone) {
-      await db.prepare("UPDATE orders SET status = 'completed', actual_delivery_date = ?, updated_at = datetime('now', '+8 hours') WHERE id = ?").run(now, id);
-    }
+    // 原子判定订单完成：全部节点 completed 时一次性置为已完成（避免并发读快照漏判）
+    await db.prepare(`
+      UPDATE orders SET status = 'completed', actual_delivery_date = ?, updated_at = datetime('now', '+8 hours')
+      WHERE id = ?
+        AND status <> 'completed'
+        AND (SELECT COUNT(*) FROM process_stages WHERE order_id = ? AND status <> 'completed') = 0
+    `).run(now, id, id);
 
     // 通知下一节点（依赖全部满足后才通知，并按接收方聚合）
     const stageDef = STAGE_DEFINITIONS.find(s => s.key === stageKey);

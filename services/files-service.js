@@ -7,6 +7,15 @@ const { canDeleteFile } = require('../lib/file-permissions');
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 const MAX_ORDER_FILES_BYTES = 200 * 1024 * 1024; // 单订单附件总量上限 200MB
 
+// 单进程内按订单串行化上传，避免并发同时通过配额检查
+const orderUploadQueues = new Map();
+function withOrderUploadLock(orderId, fn) {
+  const prev = orderUploadQueues.get(orderId) || Promise.resolve();
+  const next = prev.then(fn, fn);
+  orderUploadQueues.set(orderId, next.catch(() => {}));
+  return next;
+}
+
 // 确保上传目录存在
 if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
@@ -88,28 +97,30 @@ async function saveUploadedFile({ orderId, user, file, stageKey }) {
     return { status: 404, body: { error: '订单不存在' } };
   }
 
-  const totalRow = await db.prepare('SELECT COALESCE(SUM(file_size), 0) AS total FROM order_files WHERE order_id = ?').get(orderId);
-  const currentTotal = Number(totalRow && totalRow.total) || 0;
-  if (exceedsOrderFileQuota(currentTotal, file.size)) {
-    fs.unlinkSync(file.path);
-    return { status: 400, body: { error: '该订单附件总量已达上限（200MB），请先清理部分附件' } };
-  }
+  return withOrderUploadLock(Number(orderId), async () => {
+    const totalRow = await db.prepare('SELECT COALESCE(SUM(file_size), 0) AS total FROM order_files WHERE order_id = ?').get(orderId);
+    const currentTotal = Number(totalRow && totalRow.total) || 0;
+    if (exceedsOrderFileQuota(currentTotal, file.size)) {
+      fs.unlinkSync(file.path);
+      return { status: 400, body: { error: '该订单附件总量已达上限（200MB），请先清理部分附件' } };
+    }
 
-  const originalName = fixOriginalName(file.originalname);
+    const originalName = fixOriginalName(file.originalname);
 
-  try {
-    await db.prepare(`
-      INSERT INTO order_files (order_id, original_name, stored_name, mime_type, file_size, uploaded_by, stage_key)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(orderId, originalName, file.filename, file.mimetype, file.size, user.id, stageKey || null);
-  } catch (e) {
-    try { fs.unlinkSync(file.path); } catch {}
-    throw e;
-  }
+    try {
+      await db.prepare(`
+        INSERT INTO order_files (order_id, original_name, stored_name, mime_type, file_size, uploaded_by, stage_key)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(orderId, originalName, file.filename, file.mimetype, file.size, user.id, stageKey || null);
+    } catch (e) {
+      try { fs.unlinkSync(file.path); } catch {}
+      throw e;
+    }
 
-  await database.logAudit(user.id, user.name, '上传附件', 'order', parseInt(orderId), `订单: ${order.order_no}, 文件: ${originalName}`);
+    await database.logAudit(user.id, user.name, '上传附件', 'order', parseInt(orderId), `订单: ${order.order_no}, 文件: ${originalName}`);
 
-  return { status: 201, body: { message: '文件上传成功', filename: originalName } };
+    return { status: 201, body: { message: '文件上传成功', filename: originalName } };
+  });
 }
 
 async function resolveFile(fileId) {

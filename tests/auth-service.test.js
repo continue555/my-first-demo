@@ -25,6 +25,7 @@ function fakeDb(getHandler) {
 }
 
 const admin = { id: 1, name: '管理员' };
+const { changePassword } = require('../services/auth-service');
 
 test('register rejects missing department', async () => {
   const original = database.getDb;
@@ -61,6 +62,17 @@ test('updateUser rejects missing department', async () => {
     const r = await updateUser(admin, 5, { department_id: 999 });
     assert.equal(r.status, 400);
     assert.equal(r.body.error, '部门不存在');
+  } finally {
+    database.getDb = original;
+  }
+});
+
+test('changePassword returns 404 when user no longer exists', async () => {
+  const original = database.getDb;
+  database.getDb = () => fakeDb(() => null);
+  try {
+    const r = await changePassword(999, { oldPassword: '123456', newPassword: '654321' });
+    assert.equal(r.status, 404);
   } finally {
     database.getDb = original;
   }

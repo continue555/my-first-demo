@@ -1,6 +1,6 @@
 # 项目状态快照
 
-> 用途：供长时间会话压缩后快速恢复上下文。更新日期：2026-08-06。
+> 用途：供长时间会话压缩后快速恢复上下文。更新日期：2026-08-07。
 
 ## 当前状态
 
@@ -17,6 +17,19 @@
 - 前端构建：`cd frontend && npm run build`
 - 部署：`$env:SSH_PASS=...; node deploy-remote.js`（首次/依赖变更加 `$env:DEPLOY_INSTALL='1'`）
 - 服务器端：`bash deploy/server-deploy.sh`、`bash deploy/rollback.sh <时间戳>`、`bash scripts/restore-drill.sh`、`bash scripts/health-check.sh`、`bash scripts/log-query.sh <关键字>`
+
+## 近期完成（2026-08-07）
+
+- 安全：全局错误处理不再把 `err.message` 返回给客户端，统一返回“服务器内部错误”，服务端保留完整日志
+- 安全：附件预览/下载接口移除 URL query 传 JWT 的兜底，令牌只走 Header/Cookie
+- 安全：登录 IP 记录优先 `x-real-ip`/`req.ip`，不再直接信任 `X-Forwarded-For`
+- 安全：畸形 Cookie（非法百分号编码）直接丢弃，不再导致请求 500
+- 修复：修改密码接口对已删除用户返回 404“用户不存在”，不再 500
+- 并发：订单完成判定改为原子 `UPDATE ... WHERE status <> 'completed' AND (SELECT COUNT(*) ...)=0`，避免并发完成时漏判
+- 导出：失败时不向客户端暴露内部错误，统一返回“导出失败，请重试”；导出文件名清洗 CR/LF
+- 并发：单订单附件上传按订单串行化，避免并发上传同时通过 200MB 配额检查
+- 前端：仪表盘加载失败给出错误提示，不再静默吞错
+- 通知折叠：同类事件通知按事件 key 聚合，跨非连续通知也合并展示
 
 ## 近期完成（2026-08-06）
 
@@ -58,14 +71,14 @@
 - 部署：新增 CI 硬校验 `check-assets-in-sync`（前端构建后比对资源映射）与 `check-deploy-manifest`（上传清单覆盖检查）；`deploy-remote.js` 上传前本地预检缺失文件与失效映射目标
 - 测试：新增 service 层单元测试（登录限流、阶段推进/并发唯一冲突、单订单导出工作簿），E2E 覆盖附件上传/预览、用户管理、批量导出
 - 测试：E2E 增加浏览器真实下载导出文件（下载后解析内容）与 Excel/Word 在线预览渲染验证
-- 前端：接入 Vitest + @vue/test-utils（组件/工具测试 19 项）；移动端可点击元素改为原生按钮并补 `aria-label` 与键盘焦点；TypeScript 按用户确认维持现状
+- 前端：接入 Vitest + @vue/test-utils（组件/工具测试 20 项）；移动端可点击元素改为原生按钮并补 `aria-label` 与键盘焦点；TypeScript 按用户确认维持现状
 - 移动端兼容：viewport-fit=cover + safe-area 适配、输入框 16px 防 iOS 自动缩放、100dvh 视口适配；E2E 增加 iPhone 13/iPhone SE/Pixel 7/微信 UA 移动端矩阵
 - 架构：auth/附件/导出业务已拆 service（`auth-service`、`files-service`、`export-service`），routes 全部为薄路由
 - 依赖：后端 exceljs 依赖的 uuid 已通过 npm overrides 升级至 11.1.1，后端生产依赖审计 0 漏洞（无需破坏性降级 exceljs）
 - 依赖：修复新增 brace-expansion 高危（2.1.3 → 2.1.4，GHSA-rgw5-rvv9-x895），后端全量审计 0 漏洞
 - 移动端体验：底部导航、订单卡片、筛选保留、预览全屏
 - 安全：HttpOnly Cookie + CSRF、限流持久化、角色白名单、附件权限、参数校验、stats 接口按角色限制
-- 测试：API 66 项、后端单元 78 项、前端 Vitest 19 项、压力测试（并发建单/阶段推进/50 单导出）、E2E、依赖审计
+- 测试：API 66 项、后端单元 81 项、前端 Vitest 20 项、压力测试（并发建单/阶段推进/50 单导出）、E2E、依赖审计
 - 并发修复：阶段完成通知插入改为 `ON CONFLICT DO NOTHING`
 - 依赖：xlsx 已替换为 read-excel-file；Vite 升级 7.3.6，前端审计 0 漏洞；zod 接入关键写接口
 - 架构：订单/审计/通知/auth/附件/导出业务已拆 service；结构化日志
@@ -86,6 +99,6 @@
 - `routes/`：薄路由，仅保留请求/响应与中间件编排
 - `lib/`：overdue、sanitize、stage-permissions、validators(zod)、download-ticket、file-permissions、cookies、dept-filter、current-stage
 - `shared/`：stage-defs、stage-durations、overdue-escalation、status-labels、role-labels
-- `migrations/`：PostgreSQL 自动迁移（25 个版本：001-024、026；025 已撤销）
+- `migrations/`：PostgreSQL 自动迁移（26 个版本：001-024、026、027；025 已撤销）
 - `e2e/`、`tests/`：Playwright E2E、Node 单元测试
 - `deploy/`：server-deploy.sh、rollback.sh；`scripts/`：restore-drill、health-check、install-crons、log-query

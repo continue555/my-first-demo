@@ -7,7 +7,7 @@ const MAP_FILE = path.join(ROOT, 'lib', 'stale-asset-map.json');
 const HTML_FILE = path.join(ROOT, 'public', 'index.html');
 const ASSET_DIR = path.join(ROOT, 'public', 'assets');
 
-const CHUNKS = ['AuditLog', 'Dashboard', 'Export', 'Layout', 'Login', 'Notifications', 'OrderDetail', 'Orders', 'Users', 'index', 'vendor', 'docx-preview', 'navigation', 'role-labels'];
+const CHUNKS = ['AuditLog', 'Dashboard', 'Export', 'Layout', 'Login', 'Notifications', 'OrderDetail', 'Orders', 'Todos', 'Users', 'index', 'vendor', 'docx-preview', 'navigation', 'role-labels'];
 
 function buildExpectedMap() {
   const oldMap = JSON.parse(fs.readFileSync(MAP_FILE, 'utf8'));

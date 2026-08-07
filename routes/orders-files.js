@@ -97,9 +97,6 @@ router.get('/files/:id/preview', async (req, res) => {
     }
     return serveFileById(req, res, true);
   }
-  if (!req.headers.authorization && req.query.token) {
-    req.headers.authorization = 'Bearer ' + req.query.token;
-  }
   authMiddleware(req, res, async () => serveFileById(req, res, true));
 });
 
@@ -110,9 +107,6 @@ router.get('/files/:id/download', async (req, res) => {
       return res.status(403).json({ error: '下载链接无效或已过期' });
     }
     return serveFileById(req, res, false);
-  }
-  if (!req.headers.authorization && req.query.token) {
-    req.headers.authorization = 'Bearer ' + req.query.token;
   }
   authMiddleware(req, res, async () => serveFileById(req, res, false));
 });
