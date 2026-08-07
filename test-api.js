@@ -452,10 +452,10 @@ async function main() {
       : { error: "expected 404 for foreign job, got " + status.status + "/" + download.status };
   });
   await test("Cancelled export rejected", async () => { const r = await req("GET", "/api/export/orders?status=cancelled"); return r.status === 400 ? {} : { error: "expected 400, got " + r.status }; });
-  await test("Delayed status rejected everywhere", async () => {
+  await test("Delayed export status rejected; order edit endpoint removed", async () => {
     const r1 = await req("POST", "/api/export/jobs", { status: "delayed" });
     const r2 = await req("PUT", `/api/orders/${createdOrderId}`, { status: "delayed" });
-    return r1.status === 400 && r2.status === 400 ? {} : { error: "expected 400 for delayed, got " + r1.status + "/" + r2.status };
+    return r1.status === 400 && r2.status === 404 ? {} : { error: "expected 400/404, got " + r1.status + "/" + r2.status };
   });
   await test("Permission (finance denied)", async () => {
     const oldToken = token;

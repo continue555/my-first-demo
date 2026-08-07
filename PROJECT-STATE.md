@@ -43,6 +43,8 @@
 - 性能：我的待办改为一次批量查询全部节点，消除 N+1
 - 性能：订单列表改为一次批量查询当前页节点，消除 N+1
 - 导出：导出任务增加归属校验，创建人之外的管理员/总经理不能查看或下载他人任务
+- 订单：移除订单编辑接口与 `updateOrder` 服务，订单状态与实际交货日期只能由流程节点完成自动更新
+- 清理：移除误入 `lib/` 的 Python 依赖（203 个跟踪文件）与未使用的 `middleware/async-handler.js`、`canAccessFile`/`buildDepartmentFilter` 死函数
 - CI：`JWT_SECRET` 改用 GitHub Actions Secret 引用，仓库不再明文提交测试密钥
 
 ## 近期完成（2026-08-06）

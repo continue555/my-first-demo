@@ -24,11 +24,6 @@ router.get('/:id', authMiddleware, async (req, res) => {
   res.status(r.status).json(r.body);
 });
 
-router.put('/:id', authMiddleware, requireRole('admin', 'management', 'sales'), async (req, res) => {
-  const r = await orderService.updateOrder(req.user, req.params.id, req.body);
-  res.status(r.status).json(r.body);
-});
-
 router.delete('/:id', authMiddleware, requireRole('admin', 'management', 'sales'), async (req, res) => {
   const r = await orderService.deleteOrder(req.user, req.params.id);
   res.status(r.status).json(r.body);

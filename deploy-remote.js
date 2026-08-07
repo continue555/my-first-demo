@@ -97,7 +97,6 @@ conn.on('ready', () => {
         ['services/auth-service.js', `${BASE}/services/auth-service.js`],
         ['services/files-service.js', `${BASE}/services/files-service.js`],
         ['services/export-service.js', `${BASE}/services/export-service.js`],
-        ['middleware/async-handler.js', `${BASE}/middleware/async-handler.js`],
         ['middleware/auth.js', `${BASE}/middleware/auth.js`],
         ['middleware/csrf.js', `${BASE}/middleware/csrf.js`],
         ['lib/sanitize.js', `${BASE}/lib/sanitize.js`],

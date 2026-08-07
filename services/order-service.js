@@ -270,31 +270,6 @@ async function getOrder(id) {
   return { status: 200, body: { order, stages } };
 }
 
-async function updateOrder(user, id, body) {
-  const db = getDb();
-  const order = await db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
-  if (!order) {
-    return { status: 404, body: { error: '订单不存在' } };
-  }
-
-  const validation = validateOrderInput(body, false);
-  if (validation.error) return { status: 400, body: { error: validation.error } };
-  const v = validation.data;
-
-  await db.prepare(`
-    UPDATE orders SET
-      planned_delivery_date = COALESCE(?, planned_delivery_date),
-      actual_delivery_date = COALESCE(?, actual_delivery_date),
-      status = COALESCE(?, status),
-      updated_at = datetime('now', '+8 hours')
-    WHERE id = ?
-  `).run(v.planned_delivery_date ?? null, v.actual_delivery_date ?? null, v.status ?? null, id);
-
-  await logAudit(user.id, user.name, "编辑订单", "order", parseInt(id), `订单编号: ${order.order_no}`);
-
-  return { status: 200, body: { message: '更新成功' } };
-}
-
 async function deleteOrder(user, id) {
   const db = getDb();
   const order = await db.prepare('SELECT * FROM orders WHERE id = ?').get(id);
@@ -612,7 +587,7 @@ function validateStageUpdate(body) {
 }
 
 module.exports = {
-  listOrders, getStats, createOrder, getOrder, updateOrder, deleteOrder, updateStage, updateStageTime,
+  listOrders, getStats, createOrder, getOrder, deleteOrder, updateStage, updateStageTime,
   validateStageUpdate, cleanText, validateDate, validateStageDateTime, validateOrderInput, generateOrderNo,
   STAGE_DEFINITIONS
 };
