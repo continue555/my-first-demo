@@ -5,9 +5,9 @@ const { buildSingleOrderWorkbook } = require('../services/export-service');
 
 test('single order workbook contains order, stages and attachments', async () => {
   const order = {
-    order_no: 'ORD-2026-0001', product_model: 'CM-01', quantity: 2,
+    order_no: 'ORD-2026-0001',
     planned_delivery_date: '2026-08-01', actual_delivery_date: null,
-    status: 'pending', creator_name: '管理员', created_at: '2026-08-01T09:00:00', notes: '备注内容'
+    status: 'pending', creator_name: '管理员', created_at: '2026-08-01T09:00:00'
   };
   const stages = [
     { stage_order: 1, stage_name: '签订合同', status: 'completed', start_date: '2026-08-01T09:00', planned_end_date: '2026-08-02T09:00', actual_end_date: '2026-08-01T18:00', operator_name: '张销售', notes: null },
@@ -44,6 +44,7 @@ test('single order workbook contains order, stages and attachments', async () =>
   assert.ok(!text.includes('合同金额'));
   assert.ok(!text.includes('CM-01'));
   assert.ok(!text.includes('100000'));
+  assert.ok(!text.includes('备注内容'));
 
   const stageSheet = parsed.worksheets.find(w => w.name === '流程明细');
   let stageText = '';

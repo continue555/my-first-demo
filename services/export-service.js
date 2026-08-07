@@ -423,7 +423,7 @@ async function buildSingleOrderWorkbook(order, stages, files, downloadBase, user
 
   // Sheet 1: 订单概要
   const ws1 = wb.addWorksheet('订单概要');
-  const sumHdrs = ['订单编号', '计划交货日期', '实际交货日期', '订单状态', '创建人', '创建时间', '备注'];
+  const sumHdrs = ['订单编号', '计划交货日期', '实际交货日期', '订单状态', '创建人', '创建时间'];
   const hdr1 = ws1.getRow(1);
   sumHdrs.forEach((h, i) => {
     const cell = hdr1.getCell(i + 1);
@@ -437,7 +437,6 @@ async function buildSingleOrderWorkbook(order, stages, files, downloadBase, user
   row1.getCell(4).value = getStatusText(order.status);
   row1.getCell(5).value = order.creator_name || '';
   row1.getCell(6).value = order.created_at;
-  row1.getCell(7).value = order.notes || '';
   for (let i = 1; i <= sumHdrs.length; i++) row1.getCell(i).alignment = { horizontal: 'left' };
   const oc = getOrderOverdueColor(order);
   if (oc) for (let i = 1; i <= sumHdrs.length; i++) applyCellStyle(row1.getCell(i), oc);

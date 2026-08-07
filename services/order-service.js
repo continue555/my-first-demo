@@ -59,17 +59,6 @@ function validateOrderInput(body, create) {
   const data = {};
   const has = key => body[key] !== undefined;
 
-  if (has('product_model')) {
-    const product = body.product_model === null || body.product_model === undefined ? '' : cleanText(body.product_model, 200);
-    data.product_model = product || null;
-  }
-  if (has('quantity')) {
-    const quantity = Number(body.quantity);
-    if (!Number.isInteger(quantity) || quantity < 1 || quantity > 100000) {
-      return { error: '数量必须是 1-100000 的整数' };
-    }
-    data.quantity = quantity;
-  }
   if (create || has('planned_delivery_date')) {
     const date = validateDate(body.planned_delivery_date);
     if (!date.ok) return { error: date.error };
@@ -84,12 +73,6 @@ function validateOrderInput(body, create) {
   if (has('status')) {
     if (!ORDER_STATUSES.includes(body.status)) return { error: '不支持的订单状态' };
     data.status = body.status;
-  }
-  if (has('notes')) {
-    if (body.notes !== null && body.notes !== undefined && typeof body.notes !== 'string') {
-      return { error: '备注格式不正确' };
-    }
-    data.notes = body.notes === null || body.notes === undefined ? null : cleanText(body.notes, 2000);
   }
   return { data };
 }
@@ -226,9 +209,9 @@ async function createOrder(user, body) {
   let result;
   try {
     result = await db.prepare(`
-      INSERT INTO orders (order_no, product_model, quantity, planned_delivery_date, status, notes, created_by)
-      VALUES (?, ?, ?, ?, 'pending', ?, ?)
-    `).run(orderNo, v.product_model ?? null, v.quantity ?? 1, v.planned_delivery_date ?? null, v.notes ?? null, user.id);
+      INSERT INTO orders (order_no, planned_delivery_date, status, created_by)
+      VALUES (?, ?, 'pending', ?)
+    `).run(orderNo, v.planned_delivery_date ?? null, user.id);
   } catch (e) {
     if (e && e.code === '23505') {
       return { status: 400, body: { error: '订单编号已存在' } };
@@ -288,15 +271,12 @@ async function updateOrder(user, id, body) {
 
   await db.prepare(`
     UPDATE orders SET
-      product_model = COALESCE(?, product_model),
-      quantity = COALESCE(?, quantity),
       planned_delivery_date = COALESCE(?, planned_delivery_date),
       actual_delivery_date = COALESCE(?, actual_delivery_date),
       status = COALESCE(?, status),
-      notes = COALESCE(?, notes),
       updated_at = datetime('now', '+8 hours')
     WHERE id = ?
-  `).run(v.product_model ?? null, v.quantity ?? null, v.planned_delivery_date ?? null, v.actual_delivery_date ?? null, v.status ?? null, v.notes ?? null, id);
+  `).run(v.planned_delivery_date ?? null, v.actual_delivery_date ?? null, v.status ?? null, id);
 
   await logAudit(user.id, user.name, "编辑订单", "order", parseInt(id), `订单编号: ${order.order_no}`);
 

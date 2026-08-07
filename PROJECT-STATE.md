@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-- 生产：http://42.194.139.7，PM2 `blowing-machine`，线上 API 测试 67/67 通过
+- 生产：http://42.194.139.7，PM2 `blowing-machine`，线上 API 测试 66/66 通过
 - 技术栈：Node.js + Express + PostgreSQL、Vue 3 + Vite 7、Pinia、ExcelJS、zod、docx-preview、read-excel-file
 - GitHub：continue555/my-first-demo，master 分支，CI 七任务全绿
 - 部署：`deploy-remote.js` 上传 → 服务器 `deploy/server-deploy.sh` 备份/构建/重启/测试/自动回滚
@@ -34,6 +34,7 @@
 - 修复：采购“下单时间”（`order_date`）支持清空（显式传空值时清空，未传则保留原值）
 - 金额清理：订单不再存储/返回合同金额，新增 028 迁移删除 `orders.contract_amount` 列；创建/编辑/接口/前端/导出全部移除金额处理
 - 字段清理：订单不再存储/返回客户名称、项目名称，新增 029 迁移删除 `orders.customer_name`/`orders.project_name` 列；创建/编辑/接口/前端全部移除
+- 字段清理：订单不再存储/返回产品型号、数量、订单备注，新增 030 迁移删除 `orders.product_model`/`orders.quantity`/`orders.notes` 列；创建/编辑/接口/前端/导出订单概要全部移除（节点备注保留）
 
 ## 近期完成（2026-08-06）
 
@@ -82,7 +83,7 @@
 - 依赖：修复新增 brace-expansion 高危（2.1.3 → 2.1.4，GHSA-rgw5-rvv9-x895），后端全量审计 0 漏洞
 - 移动端体验：底部导航、订单卡片、筛选保留、预览全屏
 - 安全：HttpOnly Cookie + CSRF、限流持久化、角色白名单、附件权限、参数校验、stats 接口按角色限制
-- 测试：API 68 项、后端单元 82 项、前端 Vitest 20 项、压力测试（并发建单/阶段推进/50 单导出）、E2E、依赖审计
+- 测试：API 66 项、后端单元 81 项、前端 Vitest 20 项、压力测试（并发建单/阶段推进/50 单导出）、E2E、依赖审计
 - 并发修复：阶段完成通知插入改为 `ON CONFLICT DO NOTHING`
 - 依赖：xlsx 已替换为 read-excel-file；Vite 升级 7.3.6，前端审计 0 漏洞；zod 接入关键写接口
 - 架构：订单/审计/通知/auth/附件/导出业务已拆 service；结构化日志
@@ -103,6 +104,6 @@
 - `routes/`：薄路由，仅保留请求/响应与中间件编排
 - `lib/`：overdue、sanitize、stage-permissions、validators(zod)、download-ticket、file-permissions、cookies、dept-filter、current-stage
 - `shared/`：stage-defs、stage-durations、overdue-escalation、status-labels、role-labels
-- `migrations/`：PostgreSQL 自动迁移（28 个版本：001-024、026、027、028、029；025 已撤销）
+- `migrations/`：PostgreSQL 自动迁移（29 个版本：001-024、026、027、028、029、030；025 已撤销）
 - `e2e/`、`tests/`：Playwright E2E、Node 单元测试
 - `deploy/`：server-deploy.sh、rollback.sh；`scripts/`：restore-drill、health-check、install-crons、log-query

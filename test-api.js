@@ -193,7 +193,6 @@ async function main() {
     return r.status === 400 ? {} : { error: "expected 400, got " + r.status };
   });
   await test("Planned delivery date required", async () => { const r = await req("POST", "/api/orders", { customer_name: "Test", project_name: "Test" }); return r.status === 400 ? {} : { error: "expected 400, got " + r.status }; });
-  await test("Invalid quantity rejected", async () => { const r = await req("POST", "/api/orders", { customer_name: "Test", project_name: "Test", quantity: -1, planned_delivery_date: "2026-08-10" }); return r.status === 400 ? {} : { error: "expected 400, got " + r.status }; });
   await test("No auto dates on create", async () => {
     const r = await req("GET", `/api/orders/${createdOrderId}`);
     const stage = (r.body.stages || []).find(s => s.stage_key === "contract_sign");
@@ -562,10 +561,6 @@ async function main() {
     const r = await req("GET", "/api/orders/stats");
     token = oldToken;
     return r.status === 403 ? {} : { error: "expected 403, got " + r.status };
-  });
-  await test("Non-string notes rejected", async () => {
-    const r = await req("POST", "/api/orders", { customer_name: "T", project_name: "T", planned_delivery_date: "2026-08-10", notes: { a: 1 } });
-    return r.status === 400 ? {} : { error: "expected 400, got " + r.status };
   });
   await test("Notification read respects visibility", async () => {
     const list = await req("GET", "/api/notifications?limit=200");

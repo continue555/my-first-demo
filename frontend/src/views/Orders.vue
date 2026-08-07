@@ -206,10 +206,7 @@ async function createOrder() {
     const orderNo = newOrder.value.order_no.trim();
     const body = {
       order_no: orderNo,
-      product_model: '',
-      quantity: 1,
-      planned_delivery_date: newOrder.value.planned_delivery_date || null,
-      notes: ''
+      planned_delivery_date: newOrder.value.planned_delivery_date || null
     };
     await api.post('/orders', body);
     toast.show('订单创建成功');

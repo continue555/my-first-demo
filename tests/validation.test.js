@@ -33,13 +33,6 @@ test('validateOrderInput requires delivery date on create', () => {
   assert.equal(ok.data.planned_delivery_date, '2026-08-10');
 });
 
-test('validateOrderInput rejects bad quantity and non-string notes', () => {
-  const q = validateOrderInput({ planned_delivery_date: '2026-08-10', quantity: 0 }, true);
-  assert.ok(q.error);
-  const notes = validateOrderInput({ planned_delivery_date: '2026-08-10', notes: { x: 1 } }, true);
-  assert.equal(notes.error, '备注格式不正确');
-});
-
 test('generateOrderNo follows expected prefix', () => {
   assert.match(generateOrderNo(), /^ORD-\d{4}-\d{4}-[A-Z0-9]{4}$/);
 });
