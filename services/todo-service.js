@@ -24,17 +24,27 @@ async function listMyTodos(user) {
     ORDER BY id DESC
   `).all();
 
-  const todos = [];
-  for (const order of orders) {
-    const stages = await db.prepare(`
-      SELECT ps.stage_key, ps.stage_name, ps.stage_order, ps.department_id, ps.status,
+  const stagesByOrder = new Map();
+  if (orders.length > 0) {
+    const placeholders = orders.map(() => '?').join(',');
+    const rows = await db.prepare(`
+      SELECT ps.order_id, ps.stage_key, ps.stage_name, ps.stage_order, ps.department_id, ps.status,
              ps.depends_on, ps.start_date, ps.planned_end_date, ps.actual_end_date,
              d.name AS dept_name
       FROM process_stages ps
       LEFT JOIN departments d ON ps.department_id = d.id
-      WHERE ps.order_id = ?
-      ORDER BY ps.stage_order
-    `).all(order.id);
+      WHERE ps.order_id IN (${placeholders})
+      ORDER BY ps.order_id, ps.stage_order
+    `).all(...orders.map(o => o.id));
+    for (const row of rows) {
+      if (!stagesByOrder.has(row.order_id)) stagesByOrder.set(row.order_id, []);
+      stagesByOrder.get(row.order_id).push(row);
+    }
+  }
+
+  const todos = [];
+  for (const order of orders) {
+    const stages = stagesByOrder.get(order.id) || [];
 
     const current = buildCurrentStage(stages);
     if (!current) continue;

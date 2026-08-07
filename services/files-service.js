@@ -12,7 +12,11 @@ const orderUploadQueues = new Map();
 function withOrderUploadLock(orderId, fn) {
   const prev = orderUploadQueues.get(orderId) || Promise.resolve();
   const next = prev.then(fn, fn);
-  orderUploadQueues.set(orderId, next.catch(() => {}));
+  const settled = next.then(
+    () => { if (orderUploadQueues.get(orderId) === settled) orderUploadQueues.delete(orderId); },
+    () => { if (orderUploadQueues.get(orderId) === settled) orderUploadQueues.delete(orderId); }
+  );
+  orderUploadQueues.set(orderId, settled);
   return next;
 }
 

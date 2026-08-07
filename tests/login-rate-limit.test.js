@@ -15,8 +15,9 @@ function makeFakeDb(store) {
           if (sql.trim().startsWith('DELETE')) {
             store.delete(params[0]);
           } else if (sql.includes('INSERT INTO login_attempts')) {
-            const [key, count, firstTime, lockedUntil] = params;
-            store.set(key, { attempt_key: key, count, first_time: firstTime, locked_until: lockedUntil });
+            const [key, now, , , , , lockAfter] = params;
+            const state = rateLimit.nextAttemptState(store.get(key) || null, now, lockAfter);
+            store.set(key, { attempt_key: key, count: state.count, first_time: state.firstTime, locked_until: state.lockedUntil });
           }
           return { changes: 1 };
         },

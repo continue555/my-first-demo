@@ -1,5 +1,5 @@
 const express = require('express');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, requireRole } = require('../middleware/auth');
 const { listNotifications, markRead, markAllRead, checkOverdue } = require('../services/notifications-service');
 
 const router = express.Router();
@@ -19,7 +19,7 @@ router.put('/read-all', authMiddleware, async (req, res) => {
   res.status(r.status).json(r.body);
 });
 
-router.post('/check-overdue', authMiddleware, async (req, res) => {
+router.post('/check-overdue', authMiddleware, requireRole('admin', 'management'), async (req, res) => {
   const r = await checkOverdue();
   res.status(r.status).json(r.body);
 });

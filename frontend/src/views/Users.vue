@@ -134,6 +134,10 @@ const modal = useModalStore();
 const users = ref([]);
 const roleNames = roleLabels;
 
+function escHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 const showCreate = ref(false);
 const newUser = ref({ username: '', password: '', name: '', role: '', department_id: '' });
 
@@ -199,7 +203,7 @@ async function updateUser() {
 function deleteUser(u) {
   modal.open({
     title: '确认操作',
-    content: `<p style="margin:16px 0;color:var(--text-secondary);">确定要删除用户 "${u.username}" 吗？此操作不可撤销！</p>`,
+    content: `<p style="margin:16px 0;color:var(--text-secondary);">确定要删除用户 "${escHtml(u.username)}" 吗？此操作不可撤销！</p>`,
     showConfirm: true,
     onConfirm: async () => {
       try {

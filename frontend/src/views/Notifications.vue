@@ -62,14 +62,23 @@ function toggleGroup(key) {
 }
 async function load() { try { const d = await api.get('/notifications?limit=' + notifLimit.value); notifs.value = d.notifications || []; } catch (e) { toast.show(e.message, 'error'); } }
 function loadMore() { notifLimit.value += 50; load(); }
-async function markRead(id) { try { await api.put('/notifications/'+id+'/read'); load(); } catch {} }
+async function markRead(id) {
+  try { await api.put('/notifications/'+id+'/read'); load(); }
+  catch (e) { toast.show(e.message || '操作失败，请重试', 'error'); }
+}
 async function markGroupRead(g) {
   for (const n of g.items) {
-    if (!n.is_read) { try { await api.put('/notifications/'+n.id+'/read'); } catch {} }
+    if (!n.is_read) {
+      try { await api.put('/notifications/'+n.id+'/read'); }
+      catch (e) { toast.show(e.message || '操作失败，请重试', 'error'); break; }
+    }
   }
   load();
 }
-async function markAllRead() { try { await api.put('/notifications/read-all'); toast.show('已全部标记为已读'); load(); } catch {} }
+async function markAllRead() {
+  try { await api.put('/notifications/read-all'); toast.show('已全部标记为已读'); load(); }
+  catch (e) { toast.show(e.message || '操作失败，请重试', 'error'); }
+}
 async function goOrder(n) { if (!n.order_id) return; if (!n.is_read) await markRead(n.id); navigateTo('/orders/'+n.order_id); }
 onMounted(() => { load(); pollTimer = setInterval(load, 60000); });
 onUnmounted(() => { if (pollTimer) clearInterval(pollTimer); });

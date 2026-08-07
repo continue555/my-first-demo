@@ -453,7 +453,14 @@ async function main() {
     return r3.body.error ? {} : { error: "finance should be denied" };
   });
   await test("Departments (12 depts)", async () => { const r = await req("GET", "/api/departments"); return r.body.departments && r.body.departments.length >= 12 ? {} : { error: "expected 12 depts" }; });
-    await test("Overdue check", async () => { const r = await req("POST", "/api/notifications/check-overdue"); return typeof r.body.checked !== "undefined" ? {} : { error: "overdue check failed" }; });
+  await test("Overdue check", async () => { const r = await req("POST", "/api/notifications/check-overdue"); return typeof r.body.checked !== "undefined" ? {} : { error: "overdue check failed" }; });
+  await test("Overdue check restricted to admin", async () => {
+    const oldToken = token;
+    await loginUser("jishu1", "123456");
+    const r = await req("POST", "/api/notifications/check-overdue");
+    token = oldToken;
+    return r.status === 403 ? {} : { error: "expected 403, got " + r.status };
+  });
   await test("Users list (admin)", async () => { const r = await req("GET", "/api/auth/users"); return r.body.users ? {} : { error: "no users" }; });
   await test("User create and delete", async () => {
     const username = "testuser_" + Date.now();

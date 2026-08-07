@@ -35,6 +35,9 @@ function fakeDb({ orders, stagesByOrder, parentDepts }) {
           if (sql.includes('FROM orders o')) return orders;
           if (sql.includes('FROM orders')) return orders;
           if (sql.includes('FROM departments') && sql.includes('parent_id')) return parentDepts || [];
+          if (sql.includes('FROM process_stages') && sql.includes('order_id IN (')) {
+            return params.flatMap(id => (stagesByOrder.get(id) || []).map(s => ({ ...s, order_id: id })));
+          }
           if (sql.includes('FROM process_stages') && sql.includes('order_id = ?') && sql.includes('stage_key IN')) {
             const orderId = params[0];
             const keys = params.slice(1);
