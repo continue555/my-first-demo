@@ -206,8 +206,6 @@ async function createOrder() {
     const orderNo = newOrder.value.order_no.trim();
     const body = {
       order_no: orderNo,
-      customer_name: orderNo,
-      project_name: orderNo,
       product_model: '',
       quantity: 1,
       planned_delivery_date: newOrder.value.planned_delivery_date || null,

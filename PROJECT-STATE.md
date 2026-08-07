@@ -33,6 +33,7 @@
 - 安全：nginx 统一将 `X-Forwarded-For` 覆盖为真实客户端 IP（`$remote_addr`），不再追加客户端传入值；线上配置同步并 reload
 - 修复：采购“下单时间”（`order_date`）支持清空（显式传空值时清空，未传则保留原值）
 - 金额清理：订单不再存储/返回合同金额，新增 028 迁移删除 `orders.contract_amount` 列；创建/编辑/接口/前端/导出全部移除金额处理
+- 字段清理：订单不再存储/返回客户名称、项目名称，新增 029 迁移删除 `orders.customer_name`/`orders.project_name` 列；创建/编辑/接口/前端全部移除
 
 ## 近期完成（2026-08-06）
 
@@ -102,6 +103,6 @@
 - `routes/`：薄路由，仅保留请求/响应与中间件编排
 - `lib/`：overdue、sanitize、stage-permissions、validators(zod)、download-ticket、file-permissions、cookies、dept-filter、current-stage
 - `shared/`：stage-defs、stage-durations、overdue-escalation、status-labels、role-labels
-- `migrations/`：PostgreSQL 自动迁移（27 个版本：001-024、026、027、028；025 已撤销）
+- `migrations/`：PostgreSQL 自动迁移（28 个版本：001-024、026、027、028、029；025 已撤销）
 - `e2e/`、`tests/`：Playwright E2E、Node 单元测试
 - `deploy/`：server-deploy.sh、rollback.sh；`scripts/`：restore-drill、health-check、install-crons、log-query

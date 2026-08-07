@@ -59,16 +59,6 @@ function validateOrderInput(body, create) {
   const data = {};
   const has = key => body[key] !== undefined;
 
-  if (create || has('customer_name')) {
-    const customer = cleanText(body.customer_name, 200);
-    if (!customer) return { error: '客户名称为必填项' };
-    data.customer_name = customer;
-  }
-  if (create || has('project_name')) {
-    const project = cleanText(body.project_name, 200);
-    if (!project) return { error: '项目名称为必填项' };
-    data.project_name = project;
-  }
   if (has('product_model')) {
     const product = body.product_model === null || body.product_model === undefined ? '' : cleanText(body.product_model, 200);
     data.product_model = product || null;
@@ -236,9 +226,9 @@ async function createOrder(user, body) {
   let result;
   try {
     result = await db.prepare(`
-      INSERT INTO orders (order_no, customer_name, project_name, product_model, quantity, planned_delivery_date, status, notes, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)
-    `).run(orderNo, v.customer_name, v.project_name, v.product_model ?? null, v.quantity ?? 1, v.planned_delivery_date ?? null, v.notes ?? null, user.id);
+      INSERT INTO orders (order_no, product_model, quantity, planned_delivery_date, status, notes, created_by)
+      VALUES (?, ?, ?, ?, 'pending', ?, ?)
+    `).run(orderNo, v.product_model ?? null, v.quantity ?? 1, v.planned_delivery_date ?? null, v.notes ?? null, user.id);
   } catch (e) {
     if (e && e.code === '23505') {
       return { status: 400, body: { error: '订单编号已存在' } };
@@ -260,7 +250,7 @@ async function createOrder(user, body) {
     )
   ));
 
-  await logAudit(user.id, user.name, "创建订单", "order", orderId, `订单编号: ${orderNo}, 客户: ${v.customer_name}`);
+  await logAudit(user.id, user.name, "创建订单", "order", orderId, `订单编号: ${orderNo}`);
 
   return { status: 201, body: { message: '订单创建成功', orderId, orderNo } };
 }
@@ -298,8 +288,6 @@ async function updateOrder(user, id, body) {
 
   await db.prepare(`
     UPDATE orders SET
-      customer_name = COALESCE(?, customer_name),
-      project_name = COALESCE(?, project_name),
       product_model = COALESCE(?, product_model),
       quantity = COALESCE(?, quantity),
       planned_delivery_date = COALESCE(?, planned_delivery_date),
@@ -308,7 +296,7 @@ async function updateOrder(user, id, body) {
       notes = COALESCE(?, notes),
       updated_at = datetime('now', '+8 hours')
     WHERE id = ?
-  `).run(v.customer_name ?? null, v.project_name ?? null, v.product_model ?? null, v.quantity ?? null, v.planned_delivery_date ?? null, v.actual_delivery_date ?? null, v.status ?? null, v.notes ?? null, id);
+  `).run(v.product_model ?? null, v.quantity ?? null, v.planned_delivery_date ?? null, v.actual_delivery_date ?? null, v.status ?? null, v.notes ?? null, id);
 
   await logAudit(user.id, user.name, "编辑订单", "order", parseInt(id), `订单编号: ${order.order_no}`);
 

@@ -26,19 +26,17 @@ test('validateStageDateTime accepts datetime and date', () => {
   assert.equal(validateStageDateTime('2026-08-01 09:00').ok, false);
 });
 
-test('validateOrderInput requires customer, project and delivery date on create', () => {
-  const missing = validateOrderInput({ customer_name: 'A' }, true);
-  assert.equal(missing.error, '项目名称为必填项');
-  const noDate = validateOrderInput({ customer_name: 'A', project_name: 'B' }, true);
+test('validateOrderInput requires delivery date on create', () => {
+  const noDate = validateOrderInput({}, true);
   assert.equal(noDate.error, '计划交货日期为必填项');
-  const ok = validateOrderInput({ customer_name: 'A', project_name: 'B', planned_delivery_date: '2026-08-10' }, true);
-  assert.equal(ok.data.customer_name, 'A');
+  const ok = validateOrderInput({ planned_delivery_date: '2026-08-10' }, true);
+  assert.equal(ok.data.planned_delivery_date, '2026-08-10');
 });
 
 test('validateOrderInput rejects bad quantity and non-string notes', () => {
-  const q = validateOrderInput({ customer_name: 'A', project_name: 'B', planned_delivery_date: '2026-08-10', quantity: 0 }, true);
+  const q = validateOrderInput({ planned_delivery_date: '2026-08-10', quantity: 0 }, true);
   assert.ok(q.error);
-  const notes = validateOrderInput({ customer_name: 'A', project_name: 'B', planned_delivery_date: '2026-08-10', notes: { x: 1 } }, true);
+  const notes = validateOrderInput({ planned_delivery_date: '2026-08-10', notes: { x: 1 } }, true);
   assert.equal(notes.error, '备注格式不正确');
 });
 

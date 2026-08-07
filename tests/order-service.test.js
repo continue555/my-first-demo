@@ -143,7 +143,7 @@ test('createOrder returns 400 on unique violation', async () => {
   });
   try {
     const r = await createOrder(admin, {
-      order_no: 'ORD-X', customer_name: 'A', project_name: 'B', planned_delivery_date: '2026-08-10'
+      order_no: 'ORD-X', planned_delivery_date: '2026-08-10'
     });
     assert.equal(r.status, 400);
     assert.equal(r.body.error, '订单编号已存在');

@@ -5,8 +5,7 @@ const { buildSingleOrderWorkbook } = require('../services/export-service');
 
 test('single order workbook contains order, stages and attachments', async () => {
   const order = {
-    order_no: 'ORD-2026-0001', customer_name: '客户甲', project_name: '项目乙',
-    product_model: 'CM-01', quantity: 2,
+    order_no: 'ORD-2026-0001', product_model: 'CM-01', quantity: 2,
     planned_delivery_date: '2026-08-01', actual_delivery_date: null,
     status: 'pending', creator_name: '管理员', created_at: '2026-08-01T09:00:00', notes: '备注内容'
   };
@@ -40,10 +39,6 @@ test('single order workbook contains order, stages and attachments', async () =>
   assert.ok(text.includes('签订合同'));
   assert.ok(text.includes('财务确认定金'));
   assert.ok(text.includes('合同.pdf'));
-  assert.ok(!text.includes('客户甲'));
-  assert.ok(!text.includes('项目乙'));
-  assert.ok(!text.includes('客户名称'));
-  assert.ok(!text.includes('项目名称'));
   assert.ok(!text.includes('产品型号'));
   assert.ok(!text.includes('数量'));
   assert.ok(!text.includes('合同金额'));
