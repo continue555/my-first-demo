@@ -30,6 +30,23 @@ test('completed late is overdue', () => {
   assert.equal(r.cssClass, 'overdue-red');
 });
 
+test('completed same-day with datetime actual is on time', () => {
+  const r = getOverdueInfo({
+    status: 'completed',
+    planned_end_date: '2026-08-07',
+    actual_end_date: '2026-08-07T15:13'
+  });
+  assert.equal(r.cssClass, 'overdue-green');
+});
+
+test('completed next-day with datetime actual is overdue', () => {
+  const r = getOverdueInfo({
+    status: 'completed',
+    planned_end_date: '2026-08-07',
+    actual_end_date: '2026-08-08T09:00'
+  });
+  assert.equal(r.cssClass, 'overdue-red');
+});
 
 test('missing planned date returns null', () => {
   assert.equal(getOverdueInfo({ status: 'pending' }), null);

@@ -557,6 +557,24 @@ test('shipping completion backfills actual delivery date', withNoopAudit(async (
   }
 }));
 
+test('stage completion stores date-only actual end', withNoopAudit(async () => {
+  const fake = recordingDb({
+    stageFor: genericStage,
+    allStatuses: notAllDone
+  });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStage(admin, 1, 'contract_sign', { status: 'completed' });
+    assert.equal(r.status, 200);
+    const stageUpdate = fake.runs.find(x => x.sql.includes('actual_end_date = ?') && x.params.includes('contract_sign'));
+    assert.ok(stageUpdate);
+    assert.match(String(stageUpdate.params[2]), /^\d{4}-\d{2}-\d{2}$/);
+  } finally {
+    database.getDb = original;
+  }
+}));
+
 test('order completes only when all stages completed', withNoopAudit(async () => {
   const allCompleted = Array.from({ length: 23 }, () => ({ status: 'completed' }));
   const fake = recordingDb({

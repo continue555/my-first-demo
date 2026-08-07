@@ -359,7 +359,7 @@ async function updateStage(user, id, stageKey, body) {
     }
 
     // 采购节点的实际到货时间由采购跟进/物料进仓确认后回填，完成时不写入
-    const actualEnd = PURCHASE_STAGE_KEYS.includes(stageKey) ? null : now;
+    const actualEnd = PURCHASE_STAGE_KEYS.includes(stageKey) ? null : now.slice(0, 10);
     await db.prepare(`
       UPDATE process_stages SET status = ?, start_date = COALESCE(start_date, ?), actual_end_date = ?, notes = COALESCE(?, notes), operator_id = ?, operator_name = ?, updated_at = datetime('now', '+8 hours')
       WHERE order_id = ? AND stage_key = ?
@@ -393,7 +393,7 @@ async function updateStage(user, id, stageKey, body) {
       await db.prepare(`
         UPDATE process_stages SET actual_end_date = ?, updated_at = datetime('now', '+8 hours')
         WHERE order_id = ? AND stage_key = ? AND (actual_end_date IS NULL OR actual_end_date < ?)
-      `).run(now, id, FOLLOW_UP_TO_PURCHASE[stageKey], now);
+      `).run(now.slice(0, 10), id, FOLLOW_UP_TO_PURCHASE[stageKey], now.slice(0, 10));
     }
 
     // 物料进仓确认到货后，统一回填所有采购的实际到货时间（取最晚值）
@@ -402,7 +402,7 @@ async function updateStage(user, id, stageKey, body) {
       await db.prepare(`
         UPDATE process_stages SET actual_end_date = GREATEST(COALESCE(actual_end_date, ''), ?), updated_at = datetime('now', '+8 hours')
         WHERE order_id = ? AND stage_key IN (${placeholders})
-      `).run(now, id, ...PURCHASE_STAGE_KEYS);
+      `).run(now.slice(0, 10), id, ...PURCHASE_STAGE_KEYS);
     }
 
     // 发货完成时回填实际交货日期
@@ -419,7 +419,7 @@ async function updateStage(user, id, stageKey, body) {
       WHERE id = ?
         AND status <> 'completed'
         AND (SELECT COUNT(*) FROM process_stages WHERE order_id = ? AND status <> 'completed') = 0
-    `).run(now, id, id);
+    `).run(now.slice(0, 10), id, id);
 
     // 通知下一节点（依赖全部满足后才通知，并按接收方聚合）
     const stageDef = STAGE_DEFINITIONS.find(s => s.key === stageKey);
