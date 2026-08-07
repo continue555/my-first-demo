@@ -227,7 +227,7 @@ async function getOrderId(page, orderNo) {
     await page.waitForFunction(() => !document.querySelector('.modal-overlay'), null, { timeout: 10000 });
     await page.waitForFunction(
       () => [...document.querySelectorAll('.stage-item')].some(el =>
-        el.textContent.includes('签订合同') && el.textContent.includes('已完成')
+        el.textContent.includes('签订合同') && (el.textContent.includes('超期完成') || el.textContent.includes('已完成'))
       ),
       null,
       { timeout: 15000 }
