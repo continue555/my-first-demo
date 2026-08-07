@@ -46,12 +46,12 @@ router.post('/jobs', authMiddleware, requireRole('admin', 'management'), async (
 });
 
 router.get('/jobs/:id', authMiddleware, requireRole('admin', 'management'), async (req, res) => {
-  const result = await exportService.getExportJob(req.params.id);
+  const result = await exportService.getExportJob(req.params.id, req.user.id);
   res.status(result.status).json(result.body);
 });
 
 router.get('/jobs/:id/download', authMiddleware, requireRole('admin', 'management'), async (req, res) => {
-  const result = await exportService.getExportJobDownload(req.params.id);
+  const result = await exportService.getExportJobDownload(req.params.id, req.user.id);
   if (result.status !== 200) return res.status(result.status).json(result.body);
   res.download(result.filePath);
 });

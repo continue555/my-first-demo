@@ -439,6 +439,18 @@ async function main() {
     const dl = await rawFetch("GET", `/api/export/jobs/${create.body.jobId}/download`);
     return dl.status === 200 ? {} : { error: "download failed" };
   });
+  await test("Export job ownership enforced", async () => {
+    const create = await req("POST", "/api/export/jobs", { ids: [createdOrderId] });
+    if (create.status !== 202 || !create.body.jobId) return { error: "job create failed" };
+    const oldToken = token;
+    await loginUser("zongjingli", "123456");
+    const status = await req("GET", `/api/export/jobs/${create.body.jobId}`);
+    const download = await rawFetch("GET", `/api/export/jobs/${create.body.jobId}/download`);
+    token = oldToken;
+    return status.status === 404 && download.status === 404
+      ? {}
+      : { error: "expected 404 for foreign job, got " + status.status + "/" + download.status };
+  });
   await test("Cancelled export rejected", async () => { const r = await req("GET", "/api/export/orders?status=cancelled"); return r.status === 400 ? {} : { error: "expected 400, got " + r.status }; });
   await test("Delayed status rejected everywhere", async () => {
     const r1 = await req("POST", "/api/export/jobs", { status: "delayed" });

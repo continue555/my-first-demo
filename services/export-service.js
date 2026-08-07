@@ -610,9 +610,9 @@ async function createExportJob({ user, body, downloadBase }) {
   return { status: 202, body: { jobId } };
 }
 
-async function getExportJob(id) {
+async function getExportJob(id, userId) {
   const job = exportJobs.get(id);
-  if (!job) return { status: 404, body: { error: '导出任务不存在' } };
+  if (!job || job.userId !== userId) return { status: 404, body: { error: '导出任务不存在' } };
   return {
     status: 200,
     body: {
@@ -623,9 +623,9 @@ async function getExportJob(id) {
   };
 }
 
-async function getExportJobDownload(id) {
+async function getExportJobDownload(id, userId) {
   const job = exportJobs.get(id);
-  if (!job || job.status !== 'done' || !job.filename) return { status: 404, body: { error: '导出文件不存在' } };
+  if (!job || job.userId !== userId || job.status !== 'done' || !job.filename) return { status: 404, body: { error: '导出文件不存在' } };
   return { status: 200, filePath: path.join(EXPORT_JOB_DIR, job.filename) };
 }
 

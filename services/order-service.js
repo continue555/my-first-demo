@@ -149,22 +149,34 @@ async function listOrders(query) {
     LIMIT ? OFFSET ?
   `).all(...params, parseInt(limit), offset);
 
-  // 获取每个订单的流程进度
-  const ordersWithProgress = await Promise.all(orders.map(async (order) => {
-    const stages = await db.prepare(
-      `SELECT ps.stage_key, ps.stage_name, ps.stage_order, ps.department_id, ps.status,
-              ps.start_date, ps.planned_end_date, ps.actual_end_date, d.name AS dept_name
-       FROM process_stages ps
-       LEFT JOIN departments d ON ps.department_id = d.id
-       WHERE ps.order_id = ?
-       ORDER BY ps.stage_order`
-    ).all(order.id);
+  // 一次批量查询当前页所有订单的节点，避免 N+1
+  const stagesByOrder = new Map();
+  if (orders.length > 0) {
+    const placeholders = orders.map(() => '?').join(',');
+    const rows = await db.prepare(`
+      SELECT ps.order_id, ps.stage_key, ps.stage_name, ps.stage_order, ps.department_id, ps.status,
+             ps.start_date, ps.planned_end_date, ps.actual_end_date, d.name AS dept_name
+      FROM process_stages ps
+      LEFT JOIN departments d ON ps.department_id = d.id
+      WHERE ps.order_id IN (${placeholders})
+      ORDER BY ps.order_id, ps.stage_order
+    `).all(...orders.map(o => o.id));
+    for (const row of rows) {
+      if (!stagesByOrder.has(row.order_id)) stagesByOrder.set(row.order_id, []);
+      stagesByOrder.get(row.order_id).push(row);
+    }
+  }
+
+  const ordersWithProgress = orders.map((order) => {
+    const stages = stagesByOrder.get(order.id) || [];
     const completedCount = stages.filter(s => s.status === 'completed').length;
     const totalStages = STAGE_DEFINITIONS.length;
-    order.progress = Math.round((completedCount / totalStages) * 100);
-    order.current_stage = buildCurrentStage(stages);
-    return order;
-  }));
+    return {
+      ...order,
+      progress: Math.round((completedCount / totalStages) * 100),
+      current_stage: buildCurrentStage(stages)
+    };
+  });
 
   return { status: 200, body: { orders: ordersWithProgress, total, page: parseInt(page), limit: parseInt(limit) } };
 }
