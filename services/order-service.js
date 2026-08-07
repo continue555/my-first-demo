@@ -239,27 +239,18 @@ async function createOrder(user, body) {
     const exists = await db.prepare('SELECT id FROM orders WHERE order_no = ?').get(customOrderNo);
     if (exists) return { status: 400, body: { error: '订单编号已存在' } };
   }
-  let orderNo = customOrderNo || generateOrderNo();
+  const orderNo = customOrderNo || generateOrderNo();
   let result;
-  const MAX_AUTO_ORDER_NO_ATTEMPTS = 4;
-  for (let attempt = 0; attempt < MAX_AUTO_ORDER_NO_ATTEMPTS; attempt++) {
-    try {
-      result = await db.prepare(`
-        INSERT INTO orders (order_no, customer_name, project_name, product_model, quantity, contract_amount, planned_delivery_date, status, notes, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
-      `).run(orderNo, v.customer_name, v.project_name, v.product_model ?? null, v.quantity ?? 1, v.contract_amount ?? null, v.planned_delivery_date ?? null, v.notes ?? null, user.id);
-      break;
-    } catch (e) {
-      if (e && e.code === '23505') {
-        // 自动生成的编号撞号时换号重试；自定义编号重复直接拒绝
-        if (!customOrderNo && attempt < MAX_AUTO_ORDER_NO_ATTEMPTS - 1) {
-          orderNo = generateOrderNo();
-          continue;
-        }
-        return { status: 400, body: { error: '订单编号已存在' } };
-      }
-      throw e;
+  try {
+    result = await db.prepare(`
+      INSERT INTO orders (order_no, customer_name, project_name, product_model, quantity, contract_amount, planned_delivery_date, status, notes, created_by)
+      VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
+    `).run(orderNo, v.customer_name, v.project_name, v.product_model ?? null, v.quantity ?? 1, v.contract_amount ?? null, v.planned_delivery_date ?? null, v.notes ?? null, user.id);
+  } catch (e) {
+    if (e && e.code === '23505') {
+      return { status: 400, body: { error: '订单编号已存在' } };
     }
+    throw e;
   }
 
   const orderId = result.lastInsertRowid;

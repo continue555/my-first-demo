@@ -152,35 +152,6 @@ test('createOrder returns 400 on unique violation', async () => {
   }
 });
 
-test('createOrder retries generated order number on collision', async () => {
-  let orderInserts = 0;
-  const original = database.getDb;
-  database.getDb = () => fakeDb({
-    get: () => null,
-    run: (sql, params) => {
-      if (sql.includes('INSERT INTO orders')) {
-        orderInserts++;
-        if (orderInserts === 1) {
-          const err = new Error('duplicate key');
-          err.code = '23505';
-          throw err;
-        }
-      }
-      return { lastInsertRowid: 1, changes: 1 };
-    }
-  });
-  try {
-    const r = await createOrder(admin, {
-      customer_name: 'A', project_name: 'B', planned_delivery_date: '2026-08-10'
-    });
-    assert.equal(r.status, 201);
-    assert.ok(r.body.orderNo);
-    assert.equal(orderInserts, 2);
-  } finally {
-    database.getDb = original;
-  }
-});
-
 function notificationFakeDb({ stage, depsStatuses, allStatuses }) {
   const inserts = [];
   return {
