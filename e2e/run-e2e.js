@@ -234,6 +234,70 @@ async function getOrderId(page, orderNo) {
     );
   });
 
+  await check('mold design completion requires purchase dates', async () => {
+    const moldNo = 'E2E-MOLD-' + Date.now();
+    const create = await page.evaluate(async no => {
+      const csrf = decodeURIComponent((document.cookie.match(/(?:^|; )csrf=([^;]*)/) || [])[1] || '');
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+        body: JSON.stringify({ order_no: no, planned_delivery_date: '2026-08-30' })
+      });
+      return { status: res.status, body: await res.json() };
+    }, moldNo);
+    if (create.status !== 201) throw new Error('mold order create failed');
+    const moldId = create.body.orderId;
+    try {
+      await page.evaluate(async id => {
+        const csrf = decodeURIComponent((document.cookie.match(/(?:^|; )csrf=([^;]*)/) || [])[1] || '');
+        const put = async (path, body) => {
+          const res = await fetch('/api/orders/' + id + path, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+            body: JSON.stringify(body)
+          });
+          if (!res.ok) throw new Error('advance failed: ' + path + ' ' + res.status);
+        };
+        const stages = ['contract_sign', 'deposit_confirm', 'manufacturing_approval', 'gm_sign', 'production_order', 'technical_design', 'purchase_plan'];
+        for (const key of stages) {
+          await put('/stages/' + key + '/time', { start_date: '2026-08-01', planned_end_date: '2026-08-02' });
+          await put('/stages/' + key, { status: 'in_progress' });
+          await put('/stages/' + key, { status: 'completed' });
+        }
+        await put('/stages/mold_design_purchase', { status: 'in_progress' });
+      }, moldId);
+
+      await page.goto(BASE + '/orders/' + moldId, { waitUntil: 'domcontentloaded', timeout: 45000 });
+      await page.waitForSelector('.detail-grid', { timeout: 30000 });
+      const moldItem = page.locator('.stage-item.sub-stage', { hasText: '模具设计与采购' });
+      if (!(await moldItem.locator('button', { hasText: '完成' }).isDisabled())) {
+        throw new Error('mold 完成 button should be disabled');
+      }
+      if (!(await moldItem.innerText()).includes('需先设置下单时间和计划到货')) {
+        throw new Error('mold hint missing');
+      }
+
+      await page.evaluate(async id => {
+        const csrf = decodeURIComponent((document.cookie.match(/(?:^|; )csrf=([^;]*)/) || [])[1] || '');
+        const res = await fetch('/api/orders/' + id + '/stages/mold_design_purchase/time', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+          body: JSON.stringify({ order_date: '2026-08-03', planned_end_date: '2026-08-10' })
+        });
+        if (!res.ok) throw new Error('mold time set failed: ' + res.status);
+      }, moldId);
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await page.waitForSelector('.detail-grid', { timeout: 30000 });
+      const doneBtn = page.locator('.stage-item.sub-stage', { hasText: '模具设计与采购' }).locator('button', { hasText: '完成' });
+      if (await doneBtn.isDisabled()) throw new Error('mold 完成 button still disabled');
+    } finally {
+      await page.evaluate(async id => {
+        const csrf = decodeURIComponent((document.cookie.match(/(?:^|; )csrf=([^;]*)/) || [])[1] || '');
+        await fetch('/api/orders/' + id, { method: 'DELETE', headers: { 'X-CSRF-Token': csrf } });
+      }, moldId).catch(() => {});
+    }
+  });
+
   await check('overdue badge shown on orders list, detail and todos', async () => {
     const overdueNo = 'E2E-OVERDUE-' + Date.now();
     await page.goto(BASE + '/orders', { waitUntil: 'domcontentloaded', timeout: 45000 });

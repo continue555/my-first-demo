@@ -354,6 +354,9 @@ async function updateStage(user, id, stageKey, body) {
     if (stage.status === 'pending') {
       return { status: 400, body: { error: '该流程节点尚未开始，无法直接完成' } };
     }
+    if (stageKey === 'mold_design_purchase' && (!stage.order_date || !stage.planned_end_date)) {
+      return { status: 400, body: { error: '请先设置下单时间和计划到货时间' } };
+    }
 
     // 采购节点的实际到货时间由采购跟进/物料进仓确认后回填，完成时不写入
     const actualEnd = PURCHASE_STAGE_KEYS.includes(stageKey) ? null : now;

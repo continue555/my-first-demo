@@ -129,7 +129,10 @@
                 <div class="stage-actions">
                   <template v-if="auth.canOperateStage(ps)">
                     <button v-if="ps.status === 'pending'" class="btn btn-success btn-sm" @click="updateStage(ps, 'in_progress')">开始</button>
-                    <button v-if="ps.status === 'in_progress'" class="btn btn-primary btn-sm" @click="updateStage(ps, 'completed')">完成</button>
+                    <button v-if="ps.status === 'in_progress'" class="btn btn-primary btn-sm"
+                      :disabled="ps.stage_key === 'mold_design_purchase' && !(ps.order_date && ps.planned_end_date)"
+                      @click="updateStage(ps, 'completed')">完成</button>
+                    <span v-if="ps.status === 'in_progress' && ps.stage_key === 'mold_design_purchase' && !(ps.order_date && ps.planned_end_date)" style="font-size:11px;color:var(--text-secondary)">需先设置下单时间和计划到货</span>
                     <button v-if="!isFollowUpStage(ps) && ps.stage_key !== 'material_in' && canSetTime(ps)" class="btn btn-outline btn-sm" aria-label="设置时间" @click="showTimeModal(ps)">⏱</button>
                   </template>
                   <span v-else-if="!auth.isUserDept(ps.department_id)" style="font-size:11px;color:var(--text-secondary)">无权限</span>

@@ -694,3 +694,34 @@ test('mold design stage can start without planned end date', withNoopAudit(async
     database.getDb = original;
   }
 }));
+
+test('mold design purchase cannot complete without order date and planned arrival', async () => {
+  const fake = recordingDb({
+    stageFor: key => ({ ...genericStage(key), status: 'in_progress', start_date: '2026-08-01', planned_end_date: null, order_date: null }),
+    allStatuses: notAllDone
+  });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStage(admin, 1, 'mold_design_purchase', { status: 'completed' });
+    assert.equal(r.status, 400);
+    assert.ok(r.body.error.includes('下单时间和计划到货'));
+  } finally {
+    database.getDb = original;
+  }
+});
+
+test('mold design purchase completes when order date and planned arrival set', withNoopAudit(async () => {
+  const fake = recordingDb({
+    stageFor: key => ({ ...genericStage(key), status: 'in_progress', start_date: '2026-08-01', planned_end_date: '2026-08-10', order_date: '2026-08-02' }),
+    allStatuses: notAllDone
+  });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStage(admin, 1, 'mold_design_purchase', { status: 'completed' });
+    assert.equal(r.status, 200);
+  } finally {
+    database.getDb = original;
+  }
+}));

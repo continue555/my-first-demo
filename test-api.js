@@ -150,7 +150,9 @@ async function main() {
       const timeRes = await req("PUT", `/api/orders/${orderId}/stages/${key}/time`, { planned_end_date: "2026-08-02T09:00" });
       if (timeRes.status !== 200) throw new Error(`time ${key}: ${JSON.stringify(timeRes.body)}`);
     } else if (!autoTimeStages.has(key)) {
-      const timeRes = await req("PUT", `/api/orders/${orderId}/stages/${key}/time`, { start_date: "2026-08-01T09:00", planned_end_date: "2026-08-02T09:00" });
+      const timeBody = { start_date: "2026-08-01T09:00", planned_end_date: "2026-08-02T09:00" };
+      if (key === "mold_design_purchase") timeBody.order_date = "2026-08-03";
+      const timeRes = await req("PUT", `/api/orders/${orderId}/stages/${key}/time`, timeBody);
       if (timeRes.status !== 200) throw new Error(`time ${key}: ${JSON.stringify(timeRes.body)}`);
     }
     const startRes = await req("PUT", `/api/orders/${orderId}/stages/${key}`, { status: "in_progress" });
@@ -164,7 +166,9 @@ async function main() {
       const timeRes = await req("PUT", `/api/orders/${orderId}/stages/${key}/time`, { planned_end_date: "2026-08-02T09:00" });
       if (timeRes.status !== 200) throw new Error(`time ${key}: ${JSON.stringify(timeRes.body)}`);
     } else if (!autoTimeStages.has(key)) {
-      const timeRes = await req("PUT", `/api/orders/${orderId}/stages/${key}/time`, { start_date: "2026-08-01T09:00", planned_end_date: "2026-08-02T09:00" });
+      const timeBody = { start_date: "2026-08-01T09:00", planned_end_date: "2026-08-02T09:00" };
+      if (key === "mold_design_purchase") timeBody.order_date = "2026-08-03";
+      const timeRes = await req("PUT", `/api/orders/${orderId}/stages/${key}/time`, timeBody);
       if (timeRes.status !== 200) throw new Error(`time ${key}: ${JSON.stringify(timeRes.body)}`);
     }
     const oldToken = token;
