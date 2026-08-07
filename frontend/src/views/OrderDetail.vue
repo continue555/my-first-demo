@@ -517,6 +517,16 @@ function formatSize(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
+async function doUpdateStage(stage, status) {
+  try {
+    await api.put(`/orders/${order.value.id}/stages/${stage.stage_key}`, { status });
+    toast.show('流程状态更新成功');
+    load();
+  } catch (e) {
+    toast.show(e.message, 'error');
+  }
+}
+
 async function updateStage(stage, status) {
   // 点击"开始"时，检查是否已设置时间
   const autoStage = isFollowUpStage(stage) || stage.stage_key === 'material_in' || stage.stage_key === 'delivery_payment';
@@ -526,13 +536,16 @@ async function updateStage(stage, status) {
     if (!autoStage || stage.stage_key === 'delivery_payment') showTimeModal(stage);
     return;
   }
-  try {
-    await api.put(`/orders/${order.value.id}/stages/${stage.stage_key}`, { status });
-    toast.show('流程状态更新成功');
-    load();
-  } catch (e) {
-    toast.show(e.message, 'error');
+  if (status === 'completed') {
+    modal.open({
+      title: '确认完成',
+      content: '<p style="margin:16px 0;color:var(--text-secondary);">确定要完成该流程节点吗？完成后不可直接回退。</p>',
+      showConfirm: true,
+      onConfirm: () => doUpdateStage(stage, status)
+    });
+    return;
   }
+  await doUpdateStage(stage, status);
 }
 
 function showTimeModal(stage) {

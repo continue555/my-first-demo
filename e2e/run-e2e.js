@@ -186,6 +186,54 @@ async function getOrderId(page, orderNo) {
     if (!/^\/orders\/\d+$/.test(path)) throw new Error('todo did not navigate to detail: ' + path);
   });
 
+  await check('stage completion requires confirmation', async () => {
+    await page.goto(BASE + '/orders', { waitUntil: 'domcontentloaded', timeout: 45000 });
+    await page.waitForSelector('tbody tr', { timeout: 30000 });
+    await page.locator('tbody tr', { hasText: orderNo }).locator('button').first().click();
+    await page.waitForSelector('.detail-grid', { timeout: 30000 });
+    const orderId = new URL(page.url()).pathname.split('/').pop();
+    await page.evaluate(async id => {
+      const csrf = decodeURIComponent((document.cookie.match(/(?:^|; )csrf=([^;]*)/) || [])[1] || '');
+      await fetch('/api/orders/' + id + '/stages/contract_sign/time', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+        body: JSON.stringify({ start_date: '2026-08-01', planned_end_date: '2026-08-02' })
+      });
+    }, orderId);
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.waitForSelector('.detail-grid', { timeout: 30000 });
+
+    const stageItem = page.locator('.stage-item', { hasText: '签订合同' });
+    await stageItem.locator('button', { hasText: '开始' }).click();
+    await page.waitForFunction(
+      () => [...document.querySelectorAll('.stage-item')].some(el =>
+        el.textContent.includes('签订合同') && el.textContent.includes('进行中')
+      ),
+      null,
+      { timeout: 15000 }
+    );
+
+    await stageItem.locator('button', { hasText: '完成' }).click();
+    const confirmModal = page.locator('.modal-overlay .modal', { hasText: '确认完成' });
+    await confirmModal.waitFor({ timeout: 10000 });
+    await confirmModal.locator('.modal-actions .btn-outline').click();
+    await page.waitForSelector('.modal-overlay', { state: 'detached', timeout: 10000 }).catch(() => {});
+    const afterCancel = await stageItem.innerText();
+    if (!afterCancel.includes('进行中')) throw new Error('stage completed without confirmation');
+
+    await stageItem.locator('button', { hasText: '完成' }).click();
+    await confirmModal.waitFor({ timeout: 10000 });
+    await confirmModal.locator('.modal-actions .btn-danger').click();
+    await page.waitForFunction(() => !document.querySelector('.modal-overlay'), null, { timeout: 10000 });
+    await page.waitForFunction(
+      () => [...document.querySelectorAll('.stage-item')].some(el =>
+        el.textContent.includes('签订合同') && el.textContent.includes('已完成')
+      ),
+      null,
+      { timeout: 15000 }
+    );
+  });
+
   await check('overdue badge shown on orders list, detail and todos', async () => {
     const overdueNo = 'E2E-OVERDUE-' + Date.now();
     await page.goto(BASE + '/orders', { waitUntil: 'domcontentloaded', timeout: 45000 });
