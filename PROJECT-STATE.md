@@ -4,7 +4,7 @@
 
 ## 当前状态
 
-- 生产：http://42.194.139.7，PM2 `blowing-machine`，线上 API 测试 66/66 通过
+- 生产：http://42.194.139.7，PM2 `blowing-machine`，线上 API 测试 67/67 通过
 - 技术栈：Node.js + Express + PostgreSQL、Vue 3 + Vite 7、Pinia、ExcelJS、zod、docx-preview、read-excel-file
 - GitHub：continue555/my-first-demo，master 分支，CI 七任务全绿
 - 部署：`deploy-remote.js` 上传 → 服务器 `deploy/server-deploy.sh` 备份/构建/重启/测试/自动回滚
@@ -30,6 +30,9 @@
 - 并发：单订单附件上传按订单串行化，避免并发上传同时通过 200MB 配额检查
 - 前端：仪表盘加载失败给出错误提示，不再静默吞错
 - 通知折叠：同类事件通知按事件 key 聚合，跨非连续通知也合并展示
+- 安全：nginx 统一将 `X-Forwarded-For` 覆盖为真实客户端 IP（`$remote_addr`），不再追加客户端传入值；线上配置同步并 reload
+- 修复：采购“下单时间”（`order_date`）支持清空（显式传空值时清空，未传则保留原值）
+- 修复：自动生成订单编号并发撞号时自动换号重试；自定义编号重复仍拒绝
 
 ## 近期完成（2026-08-06）
 
@@ -78,7 +81,7 @@
 - 依赖：修复新增 brace-expansion 高危（2.1.3 → 2.1.4，GHSA-rgw5-rvv9-x895），后端全量审计 0 漏洞
 - 移动端体验：底部导航、订单卡片、筛选保留、预览全屏
 - 安全：HttpOnly Cookie + CSRF、限流持久化、角色白名单、附件权限、参数校验、stats 接口按角色限制
-- 测试：API 66 项、后端单元 81 项、前端 Vitest 20 项、压力测试（并发建单/阶段推进/50 单导出）、E2E、依赖审计
+- 测试：API 67 项、后端单元 83 项、前端 Vitest 20 项、压力测试（并发建单/阶段推进/50 单导出）、E2E、依赖审计
 - 并发修复：阶段完成通知插入改为 `ON CONFLICT DO NOTHING`
 - 依赖：xlsx 已替换为 read-excel-file；Vite 升级 7.3.6，前端审计 0 漏洞；zod 接入关键写接口
 - 架构：订单/审计/通知/auth/附件/导出业务已拆 service；结构化日志

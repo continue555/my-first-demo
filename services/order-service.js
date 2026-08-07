@@ -239,19 +239,27 @@ async function createOrder(user, body) {
     const exists = await db.prepare('SELECT id FROM orders WHERE order_no = ?').get(customOrderNo);
     if (exists) return { status: 400, body: { error: '订单编号已存在' } };
   }
-  const orderNo = customOrderNo || generateOrderNo();
-
+  let orderNo = customOrderNo || generateOrderNo();
   let result;
-  try {
-    result = await db.prepare(`
-      INSERT INTO orders (order_no, customer_name, project_name, product_model, quantity, contract_amount, planned_delivery_date, status, notes, created_by)
-      VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
-    `).run(orderNo, v.customer_name, v.project_name, v.product_model ?? null, v.quantity ?? 1, v.contract_amount ?? null, v.planned_delivery_date ?? null, v.notes ?? null, user.id);
-  } catch (e) {
-    if (e && e.code === '23505') {
-      return { status: 400, body: { error: '订单编号已存在' } };
+  const MAX_AUTO_ORDER_NO_ATTEMPTS = 4;
+  for (let attempt = 0; attempt < MAX_AUTO_ORDER_NO_ATTEMPTS; attempt++) {
+    try {
+      result = await db.prepare(`
+        INSERT INTO orders (order_no, customer_name, project_name, product_model, quantity, contract_amount, planned_delivery_date, status, notes, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'pending', ?, ?)
+      `).run(orderNo, v.customer_name, v.project_name, v.product_model ?? null, v.quantity ?? 1, v.contract_amount ?? null, v.planned_delivery_date ?? null, v.notes ?? null, user.id);
+      break;
+    } catch (e) {
+      if (e && e.code === '23505') {
+        // 自动生成的编号撞号时换号重试；自定义编号重复直接拒绝
+        if (!customOrderNo && attempt < MAX_AUTO_ORDER_NO_ATTEMPTS - 1) {
+          orderNo = generateOrderNo();
+          continue;
+        }
+        return { status: 400, body: { error: '订单编号已存在' } };
+      }
+      throw e;
     }
-    throw e;
   }
 
   const orderId = result.lastInsertRowid;
@@ -493,11 +501,12 @@ async function updateStageTime(user, id, stageKey, body) {
   const { start_date, planned_end_date } = body;
   const start = validateStageDateTime(start_date);
   const planned = validateStageDateTime(planned_end_date);
+  const hasOrderDate = Object.prototype.hasOwnProperty.call(body, 'order_date');
   const orderDate = validateDate(body.order_date);
   if (!start.ok) return { status: 400, body: { error: start.error } };
   if (!planned.ok) return { status: 400, body: { error: planned.error } };
   if (!orderDate.ok) return { status: 400, body: { error: orderDate.error } };
-  if (orderDate.value && !PURCHASE_STAGE_KEYS.includes(stageKey)) {
+  if (hasOrderDate && orderDate.value && !PURCHASE_STAGE_KEYS.includes(stageKey)) {
     return { status: 400, body: { error: '仅采购节点可设置下单时间' } };
   }
   const autoTimeStage = FULL_AUTO_STAGE_KEYS.has(stageKey);
@@ -534,10 +543,11 @@ async function updateStageTime(user, id, stageKey, body) {
     return { status: 403, body: { error: '时间已设置，仅管理员和总经理可修改，请联系他们协助修改' } };
   }
 
+  const orderDateSql = hasOrderDate ? 'order_date = ?' : 'order_date = COALESCE(?, order_date)';
   await db.prepare(`
-    UPDATE process_stages SET start_date = COALESCE(?, start_date), planned_end_date = COALESCE(?, planned_end_date), order_date = COALESCE(?, order_date), planned_end_source = 'manual', updated_at = datetime('now', '+8 hours')
+    UPDATE process_stages SET start_date = COALESCE(?, start_date), planned_end_date = COALESCE(?, planned_end_date), ${orderDateSql}, planned_end_source = 'manual', updated_at = datetime('now', '+8 hours')
     WHERE order_id = ? AND stage_key = ?
-  `).run(start.value ?? null, planned.value ?? null, orderDate.value ?? null, id, stageKey);
+  `).run(start.value ?? null, planned.value ?? null, hasOrderDate ? (orderDate.value ?? null) : null, id, stageKey);
 
   // 采购计划到货时间变化时，自动同步采购跟进计划完成时间，并重算物料进仓计划完成时间
   if (PURCHASE_TO_FOLLOW_UP[stageKey] && planned.value) {

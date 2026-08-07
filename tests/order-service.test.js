@@ -152,6 +152,35 @@ test('createOrder returns 400 on unique violation', async () => {
   }
 });
 
+test('createOrder retries generated order number on collision', async () => {
+  let orderInserts = 0;
+  const original = database.getDb;
+  database.getDb = () => fakeDb({
+    get: () => null,
+    run: (sql, params) => {
+      if (sql.includes('INSERT INTO orders')) {
+        orderInserts++;
+        if (orderInserts === 1) {
+          const err = new Error('duplicate key');
+          err.code = '23505';
+          throw err;
+        }
+      }
+      return { lastInsertRowid: 1, changes: 1 };
+    }
+  });
+  try {
+    const r = await createOrder(admin, {
+      customer_name: 'A', project_name: 'B', planned_delivery_date: '2026-08-10'
+    });
+    assert.equal(r.status, 201);
+    assert.ok(r.body.orderNo);
+    assert.equal(orderInserts, 2);
+  } finally {
+    database.getDb = original;
+  }
+});
+
 function notificationFakeDb({ stage, depsStatuses, allStatuses }) {
   const inserts = [];
   return {
@@ -643,6 +672,23 @@ test('purchase stage accepts manual order date', async () => {
     const run = fake.runs.find(x => x.sql.includes('order_date'));
     assert.ok(run);
     assert.equal(run.params[2], '2026-08-07');
+  } finally {
+    database.getDb = original;
+  }
+});
+
+test('purchase stage clears order date when explicitly null', async () => {
+  const fake = recordingDb({ stageFor: genericStage });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStageTime(admin, 1, 'purchase_frame', { order_date: null });
+    assert.equal(r.status, 200);
+    const run = fake.runs.find(x => x.sql.includes('order_date'));
+    assert.ok(run);
+    assert.ok(run.sql.includes('order_date = ?'));
+    assert.ok(!run.sql.includes('COALESCE(?, order_date)'));
+    assert.equal(run.params[2], null);
   } finally {
     database.getDb = original;
   }
