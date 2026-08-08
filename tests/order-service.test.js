@@ -288,14 +288,14 @@ test('null-department stage notifies management role', withNoopAudit(async () =>
   }
 }));
 
-function recordingDb({ stageFor, plannedRows, allStatuses, depsStatuses }) {
+function recordingDb({ stageFor, plannedRows, allStatuses, depsStatuses, order }) {
   const runs = [];
   return {
     runs,
     prepare(sql) {
       return {
         async get(...params) {
-          if (sql.includes('FROM orders')) return orderRow;
+          if (sql.includes('FROM orders')) return order || orderRow;
           if (sql.includes('FROM process_stages') && sql.includes('stage_key = ?')) return stageFor ? stageFor(params[1]) : null;
           return null;
         },
@@ -395,6 +395,41 @@ test('actual end date cannot be set before completion', async () => {
     const r = await updateStageTime(purchase, 1, 'purchase_frame', { actual_end_date: '2026-08-06' });
     assert.equal(r.status, 400);
     assert.ok(r.body.error.includes('完成后修正'));
+  } finally {
+    database.getDb = original;
+  }
+});
+
+test('clearing actual end rolls back completed stage when order not completed', async () => {
+  const purchase = { id: 7, name: '采购', role: 'production', department_id: 5 };
+  const fake = recordingDb({ stageFor: key => ({ ...genericStage(key), status: 'completed' }) });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStageTime(purchase, 1, 'purchase_frame', { actual_end_date: null });
+    assert.equal(r.status, 200);
+    assert.ok(r.body.message.includes('撤回'));
+    const stageUpdate = fake.runs.find(x => x.sql.includes("status = 'in_progress'") && x.sql.includes('process_stages'));
+    assert.ok(stageUpdate);
+    const orderUpdate = fake.runs.find(x => x.sql.includes("status = 'in_progress'") && x.sql.includes('UPDATE orders'));
+    assert.ok(orderUpdate);
+  } finally {
+    database.getDb = original;
+  }
+});
+
+test('clearing actual end rejected when order completed', async () => {
+  const purchase = { id: 7, name: '采购', role: 'production', department_id: 5 };
+  const fake = recordingDb({
+    stageFor: key => ({ ...genericStage(key), status: 'completed' }),
+    order: { ...orderRow, status: 'completed' }
+  });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStageTime(purchase, 1, 'purchase_frame', { actual_end_date: null });
+    assert.equal(r.status, 400);
+    assert.ok(r.body.error.includes('不能撤回'));
   } finally {
     database.getDb = original;
   }

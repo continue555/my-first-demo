@@ -227,7 +227,7 @@ const stages = ref([]);
 const loading = ref(true);
 const loadError = ref('');
 
-const timeModal = ref({ visible: false, orderId: null, stageKey: '', stageName: '', startDate: '', plannedEnd: '', orderDate: '', actualEndDate: '', showActualEnd: false });
+const timeModal = ref({ visible: false, orderId: null, stageKey: '', stageName: '', startDate: '', plannedEnd: '', orderDate: '', actualEndDate: '', originalActualEnd: '', showActualEnd: false });
 const arrivalModal = ref({ visible: false, stage: null, notes: '' });
 const files = ref([]);
 const uploading = ref(false);
@@ -589,6 +589,7 @@ function showTimeModal(stage) {
     stageName: stage.stage_name, startDate: stage.start_date || '', plannedEnd: stage.planned_end_date || '',
     orderDate: stage.order_date || '',
     actualEndDate: stage.actual_end_date || '',
+    originalActualEnd: stage.actual_end_date || '',
     showActualEnd: stage.status === 'completed' && (auth.isAdmin || auth.isManagement || auth.canOperateStage(stage)),
     isPurchase: isPurchaseStage(stage),
     hideStart: stage.stage_key !== 'contract_sign'
@@ -602,7 +603,7 @@ function canSetTime(stage) {
   return !stage.start_date || !stage.planned_end_date;
 }
 
-async function saveTime() {
+async function submitTime() {
   try {
     const body = {
       start_date: timeModal.value.startDate, planned_end_date: timeModal.value.plannedEnd,
@@ -619,6 +620,19 @@ async function saveTime() {
   } catch (e) {
     toast.show(e.message, 'error');
   }
+}
+
+async function saveTime() {
+  if (timeModal.value.showActualEnd && !timeModal.value.actualEndDate && timeModal.value.originalActualEnd) {
+    modal.open({
+      title: '确认撤回',
+      content: '<p style="margin:16px 0;color:var(--text-secondary);">清空实际完成日期将撤回“完成”并回到进行中；订单已完成时系统会拒绝。确定吗？</p>',
+      showConfirm: true,
+      onConfirm: () => submitTime()
+    });
+    return;
+  }
+  await submitTime();
 }
 
 function deleteOrder() {

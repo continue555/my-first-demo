@@ -479,10 +479,26 @@ async function updateStageTime(user, id, stageKey, body) {
   if (!stage) {
     return { status: 404, body: { error: '流程节点不存在' } };
   }
+  const order = await db.prepare('SELECT order_no, status, planned_delivery_date FROM orders WHERE id = ?').get(id);
   if (hasActualEnd && stage.status !== 'completed') {
     return { status: 400, body: { error: '实际完成日期仅可在节点完成后修正' } };
   }
-  const order = await db.prepare('SELECT order_no, planned_delivery_date FROM orders WHERE id = ?').get(id);
+  if (hasActualEnd && stage.status === 'completed' && !actualEnd.value) {
+    if (order && order.status === 'completed') {
+      return { status: 400, body: { error: '订单已完成，不能撤回已完成节点' } };
+    }
+    // 清空实际完成日期 = 撤回完成，节点退回进行中
+    await db.prepare(`
+      UPDATE process_stages SET status = 'in_progress', actual_end_date = NULL, operator_id = ?, operator_name = ?, updated_at = datetime('now', '+8 hours')
+      WHERE order_id = ? AND stage_key = ?
+    `).run(user.id, user.name, id, stageKey);
+    await db.prepare(`
+      UPDATE orders SET status = 'in_progress', updated_at = datetime('now', '+8 hours')
+      WHERE id = ? AND status = 'completed'
+    `).run(id);
+    await logAudit(user.id, user.name, '撤回完成', 'order_stage', parseInt(id), `订单: ${order?.order_no || id}, 阶段: ${stage.stage_name}, 清空实际完成日期`);
+    return { status: 200, body: { message: '已撤回完成，节点回到进行中' } };
+  }
 
   // 如果时间已设置，仅管理员和总经理可修改
   if (user.role !== 'admin' && user.role !== 'management' && !(await canOperateStage(user, stage))) {
