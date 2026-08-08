@@ -1,6 +1,7 @@
 const database = require('../database');
 const { buildNotificationFilter } = require('../lib/dept-filter');
 const { escalationDays } = require('../shared/overdue-escalation.json');
+const { sendBusinessWebhook } = require('../lib/webhook');
 
 function dayDiff(from, to) {
   const [y1, m1, d1] = from.slice(0, 10).split('-').map(Number);
@@ -118,6 +119,7 @@ async function checkOverdue() {
       ON CONFLICT (source_key) WHERE source_key IS NOT NULL DO NOTHING
     `).run(stage.order_id, message, recipient.dept_id, recipient.role, sourceKey);
     if (result.changes > 0) {
+      sendBusinessWebhook(message);
       return { id: result.lastInsertRowid, message };
     }
     return null;

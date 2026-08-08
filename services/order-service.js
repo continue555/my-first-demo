@@ -7,6 +7,7 @@ const STAGE_DEFINITIONS = require('../shared/stage-defs.json');
 const sanitize = require('../lib/sanitize');
 const { canOperateStage } = require('../lib/stage-permissions');
 const { buildCurrentStage } = require('../lib/current-stage');
+const { sendBusinessWebhook } = require('../lib/webhook');
 const UPLOAD_DIR = path.join(__dirname, '..', 'uploads');
 
 const ORDER_STATUSES = ['pending', 'in_progress', 'completed'];
@@ -557,12 +558,14 @@ async function notifyReadyNextStages(db, order, id, stageKey, stageDef) {
           VALUES (?, ?, ?, ?)
           ON CONFLICT (source_key) WHERE source_key IS NOT NULL DO NOTHING
         `).run(id, message, rec.deptId, `stage_completed:${id}:${stageKey}:${recKey}`);
+        sendBusinessWebhook(message);
       } else {
         await db.prepare(`
           INSERT INTO notifications (order_id, message, recipient_role, source_key)
           VALUES (?, ?, ?, ?)
           ON CONFLICT (source_key) WHERE source_key IS NOT NULL DO NOTHING
         `).run(id, message, rec.role, `stage_completed:${id}:${stageKey}:${recKey}`);
+        sendBusinessWebhook(message);
       }
     } catch (e) {
       console.error(JSON.stringify({

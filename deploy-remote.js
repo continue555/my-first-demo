@@ -107,6 +107,7 @@ conn.on('ready', () => {
         ['lib/validators.js', `${BASE}/lib/validators.js`],
         ['lib/cookies.js', `${BASE}/lib/cookies.js`],
         ['lib/download-ticket.js', `${BASE}/lib/download-ticket.js`],
+        ['lib/webhook.js', `${BASE}/lib/webhook.js`],
         ['lib/login-rate-limit.js', `${BASE}/lib/login-rate-limit.js`],
         ['lib/current-stage.js', `${BASE}/lib/current-stage.js`],
         ['lib/stale-asset-map.json', `${BASE}/lib/stale-asset-map.json`],
