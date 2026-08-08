@@ -386,6 +386,52 @@ test('responsible user can correct actual end date after time set', async () => 
   }
 });
 
+test('start click stores date-only start', withNoopAudit(async () => {
+  const fake = recordingDb({
+    stageFor: key => ({ ...genericStage(key), status: 'pending', start_date: '2026-08-08', planned_end_date: '2026-08-10' }),
+    allStatuses: notAllDone
+  });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStage(admin, 1, 'contract_sign', { status: 'in_progress' });
+    assert.equal(r.status, 200);
+    const run = fake.runs.find(x => x.sql.includes('start_date = ?') && x.params.includes('contract_sign'));
+    assert.ok(run);
+    assert.match(String(run.params[1]), /^\d{4}-\d{2}-\d{2}$/);
+  } finally {
+    database.getDb = original;
+  }
+}));
+
+test('updateStageTime normalizes datetime inputs to date-only', async () => {
+  const fake = recordingDb({ stageFor: genericStage });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStageTime(admin, 1, 'purchase_frame', { start_date: '2026-08-08T09:30', planned_end_date: '2026-08-10T12:00' });
+    assert.equal(r.status, 200);
+    const run = fake.runs.find(x => x.sql.includes('start_date = COALESCE'));
+    assert.ok(run);
+    assert.equal(run.params[0], '2026-08-08');
+    assert.equal(run.params[1], '2026-08-10');
+  } finally {
+    database.getDb = original;
+  }
+});
+
+test('same-day datetime start and date actual are accepted', async () => {
+  const fake = recordingDb({ stageFor: key => ({ ...genericStage(key), status: 'completed' }) });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStageTime(admin, 1, 'purchase_frame', { start_date: '2026-08-08T09:30', actual_end_date: '2026-08-08' });
+    assert.equal(r.status, 200);
+  } finally {
+    database.getDb = original;
+  }
+});
+
 test('actual end date cannot be set before completion', async () => {
   const purchase = { id: 7, name: '采购', role: 'production', department_id: 5 };
   const fake = recordingDb({ stageFor: genericStage });
@@ -738,7 +784,7 @@ test('start overwrites suggested start date with click time', withNoopAudit(asyn
     assert.equal(r.status, 200);
     const run = fake.runs.find(x => x.sql.includes('status = ?') && x.params.includes('in_progress'));
     assert.ok(run);
-    const clickTime = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 16);
+    const clickTime = new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
     assert.equal(run.params[1], clickTime);
     assert.ok(run.sql.includes('start_date = ?') && !run.sql.includes('COALESCE(start_date'));
   } finally {

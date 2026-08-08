@@ -339,7 +339,7 @@ async function updateStage(user, id, stageKey, body) {
     await db.prepare(`
       UPDATE process_stages SET status = ?, start_date = ?, notes = COALESCE(?, notes), operator_id = ?, operator_name = ?, updated_at = datetime('now', '+8 hours')
       WHERE order_id = ? AND stage_key = ?
-    `).run(status, autoStage ? null : now, notes ?? null, user.id, user.name, id, stageKey);
+    `).run(status, autoStage ? null : now.slice(0, 10), notes ?? null, user.id, user.name, id, stageKey);
 
     // 更新订单状态为进行中
     if (order.status === 'pending') {
@@ -468,10 +468,12 @@ async function updateStageTime(user, id, stageKey, body) {
   if (stageKey === DELIVERY_PAYMENT_KEY && start.value) {
     return { status: 400, body: { error: '提货款到账不需要开始时间，请仅设置计划完成日期' } };
   }
-  if (start.value && planned.value && new Date(start.value) > new Date(planned.value)) {
+  const startDate = start.value ? start.value.slice(0, 10) : null;
+  const plannedDate = planned.value ? planned.value.slice(0, 10) : null;
+  if (startDate && plannedDate && startDate > plannedDate) {
     return { status: 400, body: { error: '开始时间不能晚于计划完成时间' } };
   }
-  if (start.value && actualEnd.value && new Date(start.value) > new Date(actualEnd.value)) {
+  if (startDate && actualEnd.value && startDate > actualEnd.value) {
     return { status: 400, body: { error: '开始时间不能晚于实际完成时间' } };
   }
 
@@ -512,27 +514,26 @@ async function updateStageTime(user, id, stageKey, body) {
   await db.prepare(`
     UPDATE process_stages SET start_date = COALESCE(?, start_date), planned_end_date = COALESCE(?, planned_end_date), ${orderDateSql}, ${actualEndSql}, planned_end_source = 'manual', updated_at = datetime('now', '+8 hours')
     WHERE order_id = ? AND stage_key = ?
-  `).run(start.value ?? null, planned.value ?? null, hasOrderDate ? (orderDate.value ?? null) : null, hasActualEnd ? (actualEnd.value ?? null) : null, id, stageKey);
+  `).run(startDate, plannedDate, hasOrderDate ? (orderDate.value ?? null) : null, hasActualEnd ? (actualEnd.value ?? null) : null, id, stageKey);
 
   // 采购计划到货时间变化时，自动同步采购跟进计划完成时间，并重算物料进仓计划完成时间
-  if (PURCHASE_TO_FOLLOW_UP[stageKey] && planned.value) {
+  if (PURCHASE_TO_FOLLOW_UP[stageKey] && plannedDate) {
     await db.prepare(`
       UPDATE process_stages SET planned_end_date = ?, updated_at = datetime('now', '+8 hours')
       WHERE order_id = ? AND stage_key = ?
-    `).run(planned.value, id, PURCHASE_TO_FOLLOW_UP[stageKey]);
+    `).run(plannedDate, id, PURCHASE_TO_FOLLOW_UP[stageKey]);
     await syncMaterialInPlanned(db, id);
   }
 
-  if (planned.value) {
-    await logAudit(user.id, user.name, '设置时间', 'order_stage', parseInt(id), `阶段: ${stage.stage_name}, 计划完成日期: ${planned.value}`);
+  if (plannedDate) {
+    await logAudit(user.id, user.name, '设置时间', 'order_stage', parseInt(id), `阶段: ${stage.stage_name}, 计划完成日期: ${plannedDate}`);
   }
   if (actualEnd.value) {
     await logAudit(user.id, user.name, '修正实际完成日期', 'order_stage', parseInt(id), `阶段: ${stage.stage_name}, 实际完成日期: ${actualEnd.value}`);
   }
 
   const warnings = [];
-  if (PURCHASE_STAGE_KEYS.includes(stageKey) && planned.value && order && order.planned_delivery_date) {
-    const plannedDate = planned.value.slice(0, 10);
+  if (PURCHASE_STAGE_KEYS.includes(stageKey) && plannedDate && order && order.planned_delivery_date) {
     if (plannedDate > order.planned_delivery_date) {
       const message = `订单 ${order.order_no} 的"${stage.stage_name}"计划到货 ${plannedDate} 晚于订单计划交货日期 ${order.planned_delivery_date}，请关注！`;
       warnings.push(message);
