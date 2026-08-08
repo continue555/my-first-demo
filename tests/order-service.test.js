@@ -486,6 +486,23 @@ test('rollback blocked when downstream stage started', async () => {
   }
 });
 
+test('foreign user cannot roll back another department stage', async () => {
+  const jishu = { id: 6, name: '技术', role: 'production', department_id: 4 };
+  const fake = recordingDb({
+    stageFor: key => key === 'purchase_frame'
+      ? { ...genericStage(key), status: 'completed' }
+      : { ...genericStage(key), status: 'pending' }
+  });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStageTime(jishu, 1, 'purchase_frame', { actual_end_date: null });
+    assert.equal(r.status, 403);
+  } finally {
+    database.getDb = original;
+  }
+});
+
 test('clearing actual end rejected when order completed', async () => {
   const purchase = { id: 7, name: '采购', role: 'production', department_id: 5 };
   const fake = recordingDb({

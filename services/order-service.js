@@ -489,6 +489,10 @@ async function updateStageTime(user, id, stageKey, body) {
   if (hasActualEnd && stage.status !== 'completed') {
     return { status: 400, body: { error: '实际完成日期仅可在节点完成后修正' } };
   }
+  // 权限校验：非管理员/总经理必须能操作该节点（含撤回场景）
+  if (user.role !== 'admin' && user.role !== 'management' && !(await canOperateStage(user, stage))) {
+    return { status: 403, body: { error: stage.department_id ? '您没有权限操作此流程节点' : '该节点无负责部门，请联系管理员' } };
+  }
   if (hasActualEnd && stage.status === 'completed' && !actualEnd.value) {
     if (order && order.status === 'completed') {
       return { status: 400, body: { error: '订单已完成，不能撤回已完成节点' } };
@@ -512,9 +516,6 @@ async function updateStageTime(user, id, stageKey, body) {
   }
 
   // 如果时间已设置，仅管理员和总经理可修改
-  if (user.role !== 'admin' && user.role !== 'management' && !(await canOperateStage(user, stage))) {
-    return { status: 403, body: { error: stage.department_id ? '您没有权限操作此流程节点' : '该节点无负责部门，请联系管理员' } };
-  }
   const timeAlreadySet = NO_START_STAGE_KEYS.has(stageKey)
     ? !!stage.planned_end_date
     : !!stage.start_date && !!stage.planned_end_date;
