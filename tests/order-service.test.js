@@ -890,6 +890,35 @@ test('mold design purchase cannot complete without order date and planned arriva
   }
 });
 
+test('shipping requires delivery payment and debug completed', withNoopAudit(async () => {
+  const statuses = { delivery_payment: 'completed', debug: 'pending' };
+  const db = fakeDb({
+    get: (sql, params) => {
+      if (sql.includes('FROM orders')) return orderRow;
+      if (sql.includes('FROM process_stages') && sql.includes('stage_key = ?')) {
+        const key = params[1];
+        if (key === 'shipping') return { ...genericStage(key), status: 'pending', department_id: 9, start_date: '2026-08-08', planned_end_date: '2026-08-30' };
+        return { status: statuses[key] || 'completed' };
+      }
+      return null;
+    },
+    all: () => []
+  });
+  const original = database.getDb;
+  database.getDb = () => db;
+  try {
+    const blocked = await updateStage(admin, 1, 'shipping', { status: 'in_progress' });
+    assert.equal(blocked.status, 400);
+    assert.ok(blocked.body.error.includes('尚未完成'));
+
+    statuses.debug = 'completed';
+    const allowed = await updateStage(admin, 1, 'shipping', { status: 'in_progress' });
+    assert.equal(allowed.status, 200);
+  } finally {
+    database.getDb = original;
+  }
+}));
+
 test('mold design purchase completes when order date and planned arrival set', withNoopAudit(async () => {
   const fake = recordingDb({
     stageFor: key => ({ ...genericStage(key), status: 'in_progress', start_date: '2026-08-01', planned_end_date: '2026-08-10', order_date: '2026-08-02' }),

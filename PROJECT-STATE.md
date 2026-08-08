@@ -52,6 +52,7 @@
 - 流程：节点完成后可修正实际完成日期；订单未完成时清空实际完成日期 = 撤回完成回到进行中，订单已完成时不允许撤回（留审计）
 - 时间：所有时间字段（开始/计划完成/实际完成/下单/交货日期）统一为纯日期，新增 032 迁移清理存量带时分数据
 - 修复：错误密码登录返回 500 的问题（登录限流 UPSERT 参数显式 `::bigint`），现在正确返回 401“用户名或密码错误”；补 API 测试
+- 流程：发货改为多依赖（提货款到账 + 调试验收都完成才能发货），新增 033 迁移同步存量订单，避免未生产就发货
 - 订单：移除订单编辑接口与 `updateOrder` 服务，订单状态与实际交货日期只能由流程节点完成自动更新
 - 清理：移除误入 `lib/` 的 Python 依赖（203 个跟踪文件）与未使用的 `middleware/async-handler.js`、`canAccessFile`/`buildDepartmentFilter` 死函数
 - CI：`JWT_SECRET` 改用 GitHub Actions Secret 引用，仓库不再明文提交测试密钥
@@ -103,7 +104,7 @@
 - 依赖：修复新增 brace-expansion 高危（2.1.3 → 2.1.4，GHSA-rgw5-rvv9-x895），后端全量审计 0 漏洞
 - 移动端体验：底部导航、订单卡片、筛选保留、预览全屏
 - 安全：HttpOnly Cookie + CSRF、限流持久化、角色白名单、附件权限、参数校验、stats 接口按角色限制
-- 测试：API 72 项、后端单元 99 项、前端 Vitest 20 项、压力测试（并发建单/阶段推进/50 单导出）、E2E、依赖审计
+- 测试：API 72 项、后端单元 100 项、前端 Vitest 20 项、压力测试（并发建单/阶段推进/50 单导出）、E2E、依赖审计
 - 并发修复：阶段完成通知插入改为 `ON CONFLICT DO NOTHING`
 - 依赖：xlsx 已替换为 read-excel-file；Vite 升级 7.3.6，前端审计 0 漏洞；zod 接入关键写接口
 - 架构：订单/审计/通知/auth/附件/导出业务已拆 service；结构化日志
@@ -124,6 +125,6 @@
 - `routes/`：薄路由，仅保留请求/响应与中间件编排
 - `lib/`：overdue、sanitize、stage-permissions、validators(zod)、download-ticket、file-permissions、cookies、dept-filter、current-stage
 - `shared/`：stage-defs、stage-durations、overdue-escalation、status-labels、role-labels
-- `migrations/`：PostgreSQL 自动迁移（31 个版本：001-024、026、027、028、029、030、031、032；025 已撤销）
+- `migrations/`：PostgreSQL 自动迁移（32 个版本：001-024、026、027、028、029、030、031、032、033；025 已撤销）
 - `e2e/`、`tests/`：Playwright E2E、Node 单元测试
 - `deploy/`：server-deploy.sh、rollback.sh；`scripts/`：restore-drill、health-check、install-crons、log-query
