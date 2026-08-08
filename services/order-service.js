@@ -355,6 +355,10 @@ async function updateStage(user, id, stageKey, body) {
     if (stage.status === 'pending') {
       return { status: 400, body: { error: '该流程节点尚未开始，无法直接完成' } };
     }
+    const depCheck = await checkDependency(id, stageKey);
+    if (!depCheck.ok) {
+      return { status: 400, body: { error: depCheck.message } };
+    }
     if (stageKey === 'mold_design_purchase' && (!stage.order_date || !stage.planned_end_date)) {
       return { status: 400, body: { error: '请先设置下单时间和计划到货时间' } };
     }
@@ -488,6 +492,15 @@ async function updateStageTime(user, id, stageKey, body) {
   if (hasActualEnd && stage.status === 'completed' && !actualEnd.value) {
     if (order && order.status === 'completed') {
       return { status: 400, body: { error: '订单已完成，不能撤回已完成节点' } };
+    }
+    const downstreamKeys = STAGE_DEFINITIONS
+      .filter(d => String(d.dependsOn || '').split(',').map(k => k.trim()).includes(stageKey))
+      .map(d => d.key);
+    for (const key of downstreamKeys) {
+      const row = await db.prepare('SELECT status FROM process_stages WHERE order_id = ? AND stage_key = ?').get(id, key);
+      if (row && row.status !== 'pending') {
+        return { status: 400, body: { error: '该节点下游已有节点开始或完成，不能直接撤回，请先处理下游节点' } };
+      }
     }
     // 清空实际完成日期 = 撤回完成，节点退回进行中
     await db.prepare(`

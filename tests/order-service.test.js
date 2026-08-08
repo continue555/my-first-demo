@@ -162,7 +162,9 @@ function notificationFakeDb({ stage, depsStatuses, allStatuses }) {
       return {
         async get(...params) {
           if (sql.includes('FROM orders') && !sql.includes('status')) return orderRow;
-          if (sql.includes('FROM process_stages') && sql.includes('stage_key = ?')) return stage;
+          if (sql.includes('FROM process_stages') && sql.includes('stage_key = ?')) {
+            return params[1] === stage.stage_key ? stage : { status: 'completed' };
+          }
           return null;
         },
         async all(...params) {
@@ -448,7 +450,9 @@ test('actual end date cannot be set before completion', async () => {
 
 test('clearing actual end rolls back completed stage when order not completed', async () => {
   const purchase = { id: 7, name: '采购', role: 'production', department_id: 5 };
-  const fake = recordingDb({ stageFor: key => ({ ...genericStage(key), status: 'completed' }) });
+  const fake = recordingDb({ stageFor: key => key === 'purchase_frame'
+    ? { ...genericStage(key), status: 'completed' }
+    : { ...genericStage(key), status: 'pending' } });
   const original = database.getDb;
   database.getDb = () => fake;
   try {
@@ -459,6 +463,24 @@ test('clearing actual end rolls back completed stage when order not completed', 
     assert.ok(stageUpdate);
     const orderStatusChange = fake.runs.find(x => x.sql.includes('UPDATE orders') && x.sql.includes("status = 'in_progress'"));
     assert.ok(!orderStatusChange);
+  } finally {
+    database.getDb = original;
+  }
+});
+
+test('rollback blocked when downstream stage started', async () => {
+  const purchase = { id: 7, name: '采购', role: 'production', department_id: 5 };
+  const fake = recordingDb({
+    stageFor: key => key === 'purchase_frame'
+      ? { ...genericStage(key), status: 'completed' }
+      : { ...genericStage(key), status: 'in_progress' }
+  });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStageTime(purchase, 1, 'purchase_frame', { actual_end_date: null });
+    assert.equal(r.status, 400);
+    assert.ok(r.body.error.includes('下游'));
   } finally {
     database.getDb = original;
   }
@@ -605,7 +627,7 @@ test('delivery_payment planned date settable when empty', async () => {
 
 test('follow-up completion backfills purchase actual arrival', withNoopAudit(async () => {
   const fake = recordingDb({
-    stageFor: genericStage,
+    stageFor: key => key === 'frame_follow_up' ? genericStage(key) : { ...genericStage(key), status: 'completed' },
     allStatuses: notAllDone,
     depsStatuses: Array.from({ length: 5 }, () => ({ status: 'completed' }))
   });
@@ -625,7 +647,7 @@ test('follow-up completion backfills purchase actual arrival', withNoopAudit(asy
 
 test('follow-up completion stores arrival notes', withNoopAudit(async () => {
   const fake = recordingDb({
-    stageFor: genericStage,
+    stageFor: key => key === 'frame_follow_up' ? genericStage(key) : { ...genericStage(key), status: 'completed' },
     allStatuses: notAllDone,
     depsStatuses: Array.from({ length: 5 }, () => ({ status: 'completed' }))
   });
@@ -644,10 +666,9 @@ test('follow-up completion stores arrival notes', withNoopAudit(async () => {
 
 test('purchase completion syncs follow-up planned date', withNoopAudit(async () => {
   const fake = recordingDb({
-    stageFor: key => ({
-      id: 10, stage_key: key, status: 'in_progress', department_id: 5,
-      start_date: '2026-08-01', planned_end_date: '2026-08-10'
-    }),
+    stageFor: key => key === 'purchase_frame'
+      ? { ...genericStage(key), status: 'in_progress', planned_end_date: '2026-08-10' }
+      : { ...genericStage(key), status: 'completed' },
     allStatuses: notAllDone
   });
   const original = database.getDb;
@@ -664,7 +685,7 @@ test('purchase completion syncs follow-up planned date', withNoopAudit(async () 
 
 test('follow-up completion does not set material_in start', withNoopAudit(async () => {
   const fake = recordingDb({
-    stageFor: genericStage,
+    stageFor: key => key === 'frame_follow_up' ? genericStage(key) : { ...genericStage(key), status: 'completed' },
     allStatuses: notAllDone,
     depsStatuses: Array.from({ length: 5 }, () => ({ status: 'completed' }))
   });
@@ -681,7 +702,7 @@ test('follow-up completion does not set material_in start', withNoopAudit(async 
 
 test('material_in completion backfills all purchase actual arrival', withNoopAudit(async () => {
   const fake = recordingDb({
-    stageFor: genericStage,
+    stageFor: key => key === 'material_in' ? genericStage(key) : { ...genericStage(key), status: 'completed' },
     allStatuses: notAllDone
   });
   const original = database.getDb;
@@ -701,7 +722,9 @@ test('material_in completion backfills all purchase actual arrival', withNoopAud
 
 test('shipping completion backfills actual delivery date', withNoopAudit(async () => {
   const fake = recordingDb({
-    stageFor: key => ({ ...genericStage(key), department_id: 9 }),
+    stageFor: key => key === 'shipping'
+      ? { ...genericStage(key), department_id: 9, status: 'in_progress' }
+      : { ...genericStage(key), department_id: 9, status: 'completed' },
     allStatuses: notAllDone
   });
   const original = database.getDb;
@@ -739,7 +762,9 @@ test('stage completion stores date-only actual end', withNoopAudit(async () => {
 test('order completes only when all stages completed', withNoopAudit(async () => {
   const allCompleted = Array.from({ length: 23 }, () => ({ status: 'completed' }));
   const fake = recordingDb({
-    stageFor: key => ({ ...genericStage(key), department_id: 9 }),
+    stageFor: key => key === 'shipping'
+      ? { ...genericStage(key), department_id: 9, status: 'in_progress' }
+      : { ...genericStage(key), department_id: 9, status: 'completed' },
     allStatuses: allCompleted
   });
   const original = database.getDb;
@@ -876,7 +901,9 @@ test('mold design stage can start without planned end date', withNoopAudit(async
 
 test('mold design purchase cannot complete without order date and planned arrival', async () => {
   const fake = recordingDb({
-    stageFor: key => ({ ...genericStage(key), status: 'in_progress', start_date: '2026-08-01', planned_end_date: null, order_date: null }),
+    stageFor: key => key === 'mold_design_purchase'
+      ? { ...genericStage(key), status: 'in_progress', start_date: '2026-08-01', planned_end_date: null, order_date: null }
+      : { ...genericStage(key), status: 'completed' },
     allStatuses: notAllDone
   });
   const original = database.getDb;
@@ -919,9 +946,40 @@ test('shipping requires delivery payment and debug completed', withNoopAudit(asy
   }
 }));
 
+test('completion re-checks dependencies', withNoopAudit(async () => {
+  const statuses = { delivery_payment: 'completed', debug: 'pending' };
+  const db = fakeDb({
+    get: (sql, params) => {
+      if (sql.includes('FROM orders')) return orderRow;
+      if (sql.includes('FROM process_stages') && sql.includes('stage_key = ?')) {
+        const key = params[1];
+        if (key === 'shipping') return { ...genericStage(key), status: 'in_progress', department_id: 9, start_date: '2026-08-08', planned_end_date: '2026-08-30' };
+        return { status: statuses[key] || 'completed' };
+      }
+      return null;
+    },
+    all: () => []
+  });
+  const original = database.getDb;
+  database.getDb = () => db;
+  try {
+    const r = await updateStage(admin, 1, 'shipping', { status: 'completed' });
+    assert.equal(r.status, 400);
+    assert.ok(r.body.error.includes('尚未完成'));
+
+    statuses.debug = 'completed';
+    const allowed = await updateStage(admin, 1, 'shipping', { status: 'completed' });
+    assert.equal(allowed.status, 200);
+  } finally {
+    database.getDb = original;
+  }
+}));
+
 test('mold design purchase completes when order date and planned arrival set', withNoopAudit(async () => {
   const fake = recordingDb({
-    stageFor: key => ({ ...genericStage(key), status: 'in_progress', start_date: '2026-08-01', planned_end_date: '2026-08-10', order_date: '2026-08-02' }),
+    stageFor: key => key === 'mold_design_purchase'
+      ? { ...genericStage(key), status: 'in_progress', start_date: '2026-08-01', planned_end_date: '2026-08-10', order_date: '2026-08-02' }
+      : { ...genericStage(key), status: 'completed' },
     allStatuses: notAllDone
   });
   const original = database.getDb;
