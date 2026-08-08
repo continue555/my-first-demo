@@ -479,6 +479,9 @@ async function updateStageTime(user, id, stageKey, body) {
   if (!stage) {
     return { status: 404, body: { error: '流程节点不存在' } };
   }
+  if (hasActualEnd && stage.status !== 'completed') {
+    return { status: 400, body: { error: '实际完成日期仅可在节点完成后修正' } };
+  }
   const order = await db.prepare('SELECT order_no, planned_delivery_date FROM orders WHERE id = ?').get(id);
 
   // 如果时间已设置，仅管理员和总经理可修改

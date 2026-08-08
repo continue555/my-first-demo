@@ -589,7 +589,7 @@ function showTimeModal(stage) {
     stageName: stage.stage_name, startDate: stage.start_date || '', plannedEnd: stage.planned_end_date || '',
     orderDate: stage.order_date || '',
     actualEndDate: stage.actual_end_date || '',
-    showActualEnd: stage.status !== 'pending' && (auth.isAdmin || auth.isManagement || auth.canOperateStage(stage)),
+    showActualEnd: stage.status === 'completed' && (auth.isAdmin || auth.isManagement || auth.canOperateStage(stage)),
     isPurchase: isPurchaseStage(stage),
     hideStart: stage.stage_key !== 'contract_sign'
   };

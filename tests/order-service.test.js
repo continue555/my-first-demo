@@ -372,7 +372,7 @@ test('purchase planned within delivery has no warning', async () => {
 
 test('responsible user can correct actual end date after time set', async () => {
   const purchase = { id: 7, name: '采购', role: 'production', department_id: 5 };
-  const fake = recordingDb({ stageFor: genericStage });
+  const fake = recordingDb({ stageFor: key => ({ ...genericStage(key), status: 'completed' }) });
   const original = database.getDb;
   database.getDb = () => fake;
   try {
@@ -381,6 +381,20 @@ test('responsible user can correct actual end date after time set', async () => 
     const run = fake.runs.find(x => x.sql.includes('actual_end_date'));
     assert.ok(run);
     assert.equal(run.params[3], '2026-08-06');
+  } finally {
+    database.getDb = original;
+  }
+});
+
+test('actual end date cannot be set before completion', async () => {
+  const purchase = { id: 7, name: '采购', role: 'production', department_id: 5 };
+  const fake = recordingDb({ stageFor: genericStage });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStageTime(purchase, 1, 'purchase_frame', { actual_end_date: '2026-08-06' });
+    assert.equal(r.status, 400);
+    assert.ok(r.body.error.includes('完成后修正'));
   } finally {
     database.getDb = original;
   }
