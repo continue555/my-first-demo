@@ -1,3 +1,5 @@
+process.env.JWT_SECRET = process.env.JWT_SECRET || 'test-secret';
+
 const test = require('node:test');
 const assert = require('node:assert');
 const database = require('../database');
@@ -25,7 +27,7 @@ function fakeDb(handlers = {}) {
 }
 
 const admin = { id: 1, name: '管理员', role: 'admin', department_id: null };
-const orderRow = { id: 1, order_no: 'ORD-1', status: 'pending' };
+const orderRow = { id: 1, order_no: 'ORD-1', status: 'pending', planned_delivery_date: '2026-08-05' };
 
 test('validateStageUpdate rejects bad notes and status', () => {
   assert.equal(validateStageUpdate({ status: 'in_progress', notes: { a: 1 } }).error, '备注格式不正确');
@@ -339,6 +341,51 @@ test('purchase planned date syncs follow-up and material_in', async () => {
   }
 });
 
+test('purchase planned after delivery warns and notifies', async () => {
+  const fake = recordingDb({ stageFor: genericStage });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStageTime(admin, 1, 'purchase_frame', { planned_end_date: '2026-08-10' });
+    assert.equal(r.status, 200);
+    assert.equal(r.body.warnings.length, 1);
+    assert.ok(r.body.warnings[0].includes('晚于订单计划交货日期'));
+    const notices = fake.runs.filter(x => x.sql.includes('INSERT INTO notifications'));
+    assert.ok(notices.length >= 2);
+  } finally {
+    database.getDb = original;
+  }
+});
+
+test('purchase planned within delivery has no warning', async () => {
+  const fake = recordingDb({ stageFor: genericStage });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStageTime(admin, 1, 'purchase_frame', { planned_end_date: '2026-08-03' });
+    assert.equal(r.status, 200);
+    assert.equal(r.body.warnings.length, 0);
+  } finally {
+    database.getDb = original;
+  }
+});
+
+test('responsible user can correct actual end date after time set', async () => {
+  const purchase = { id: 7, name: '采购', role: 'production', department_id: 5 };
+  const fake = recordingDb({ stageFor: genericStage });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStageTime(purchase, 1, 'purchase_frame', { actual_end_date: '2026-08-06' });
+    assert.equal(r.status, 200);
+    const run = fake.runs.find(x => x.sql.includes('actual_end_date'));
+    assert.ok(run);
+    assert.equal(run.params[3], '2026-08-06');
+  } finally {
+    database.getDb = original;
+  }
+});
+
 test('follow-up time settings are locked', async () => {
   const fake = recordingDb({ stageFor: genericStage });
   const original = database.getDb;
@@ -476,6 +523,25 @@ test('follow-up completion backfills purchase actual arrival', withNoopAudit(asy
     assert.ok(backfill && backfill.params.includes('purchase_frame'));
     const stageUpdate = fake.runs.find(x => x.sql.includes('actual_end_date = ?') && x.params.includes('frame_follow_up'));
     assert.ok(stageUpdate && stageUpdate.params[1] === null);
+  } finally {
+    database.getDb = original;
+  }
+}));
+
+test('follow-up completion stores arrival notes', withNoopAudit(async () => {
+  const fake = recordingDb({
+    stageFor: genericStage,
+    allStatuses: notAllDone,
+    depsStatuses: Array.from({ length: 5 }, () => ({ status: 'completed' }))
+  });
+  const original = database.getDb;
+  database.getDb = () => fake;
+  try {
+    const r = await updateStage(admin, 1, 'frame_follow_up', { status: 'completed', notes: '部分到货 2/5' });
+    assert.equal(r.status, 200);
+    const stageUpdate = fake.runs.find(x => x.sql.includes('actual_end_date = ?') && x.params.includes('frame_follow_up'));
+    assert.ok(stageUpdate);
+    assert.equal(stageUpdate.params[3], '部分到货 2/5');
   } finally {
     database.getDb = original;
   }

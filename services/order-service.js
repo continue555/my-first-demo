@@ -445,9 +445,12 @@ async function updateStageTime(user, id, stageKey, body) {
   const planned = validateStageDateTime(planned_end_date);
   const hasOrderDate = Object.prototype.hasOwnProperty.call(body, 'order_date');
   const orderDate = validateDate(body.order_date);
+  const hasActualEnd = Object.prototype.hasOwnProperty.call(body, 'actual_end_date');
+  const actualEnd = validateDate(body.actual_end_date);
   if (!start.ok) return { status: 400, body: { error: start.error } };
   if (!planned.ok) return { status: 400, body: { error: planned.error } };
   if (!orderDate.ok) return { status: 400, body: { error: orderDate.error } };
+  if (!actualEnd.ok) return { status: 400, body: { error: actualEnd.error } };
   if (hasOrderDate && orderDate.value && !PURCHASE_STAGE_KEYS.includes(stageKey)) {
     return { status: 400, body: { error: '仅采购节点可设置下单时间' } };
   }
@@ -468,11 +471,15 @@ async function updateStageTime(user, id, stageKey, body) {
   if (start.value && planned.value && new Date(start.value) > new Date(planned.value)) {
     return { status: 400, body: { error: '开始时间不能晚于计划完成时间' } };
   }
+  if (start.value && actualEnd.value && new Date(start.value) > new Date(actualEnd.value)) {
+    return { status: 400, body: { error: '开始时间不能晚于实际完成时间' } };
+  }
 
   const stage = await db.prepare('SELECT * FROM process_stages WHERE order_id = ? AND stage_key = ?').get(id, stageKey);
   if (!stage) {
     return { status: 404, body: { error: '流程节点不存在' } };
   }
+  const order = await db.prepare('SELECT order_no, planned_delivery_date FROM orders WHERE id = ?').get(id);
 
   // 如果时间已设置，仅管理员和总经理可修改
   if (user.role !== 'admin' && user.role !== 'management' && !(await canOperateStage(user, stage))) {
@@ -481,15 +488,16 @@ async function updateStageTime(user, id, stageKey, body) {
   const timeAlreadySet = NO_START_STAGE_KEYS.has(stageKey)
     ? !!stage.planned_end_date
     : !!stage.start_date && !!stage.planned_end_date;
-  if (timeAlreadySet && user.role !== 'admin' && user.role !== 'management') {
+  if (timeAlreadySet && user.role !== 'admin' && user.role !== 'management' && !hasActualEnd) {
     return { status: 403, body: { error: '时间已设置，仅管理员和总经理可修改，请联系他们协助修改' } };
   }
 
   const orderDateSql = hasOrderDate ? 'order_date = ?' : 'order_date = COALESCE(?, order_date)';
+  const actualEndSql = hasActualEnd ? 'actual_end_date = ?' : 'actual_end_date = COALESCE(?, actual_end_date)';
   await db.prepare(`
-    UPDATE process_stages SET start_date = COALESCE(?, start_date), planned_end_date = COALESCE(?, planned_end_date), ${orderDateSql}, planned_end_source = 'manual', updated_at = datetime('now', '+8 hours')
+    UPDATE process_stages SET start_date = COALESCE(?, start_date), planned_end_date = COALESCE(?, planned_end_date), ${orderDateSql}, ${actualEndSql}, planned_end_source = 'manual', updated_at = datetime('now', '+8 hours')
     WHERE order_id = ? AND stage_key = ?
-  `).run(start.value ?? null, planned.value ?? null, hasOrderDate ? (orderDate.value ?? null) : null, id, stageKey);
+  `).run(start.value ?? null, planned.value ?? null, hasOrderDate ? (orderDate.value ?? null) : null, hasActualEnd ? (actualEnd.value ?? null) : null, id, stageKey);
 
   // 采购计划到货时间变化时，自动同步采购跟进计划完成时间，并重算物料进仓计划完成时间
   if (PURCHASE_TO_FOLLOW_UP[stageKey] && planned.value) {
@@ -503,8 +511,39 @@ async function updateStageTime(user, id, stageKey, body) {
   if (planned.value) {
     await logAudit(user.id, user.name, '设置时间', 'order_stage', parseInt(id), `阶段: ${stage.stage_name}, 计划完成日期: ${planned.value}`);
   }
+  if (actualEnd.value) {
+    await logAudit(user.id, user.name, '修正实际完成日期', 'order_stage', parseInt(id), `阶段: ${stage.stage_name}, 实际完成日期: ${actualEnd.value}`);
+  }
 
-  return { status: 200, body: { message: '时间更新成功' } };
+  const warnings = [];
+  if (PURCHASE_STAGE_KEYS.includes(stageKey) && planned.value && order && order.planned_delivery_date) {
+    const plannedDate = planned.value.slice(0, 10);
+    if (plannedDate > order.planned_delivery_date) {
+      const message = `订单 ${order.order_no} 的"${stage.stage_name}"计划到货 ${plannedDate} 晚于订单计划交货日期 ${order.planned_delivery_date}，请关注！`;
+      warnings.push(message);
+      const notices = [
+        { sql: 'INSERT INTO notifications (order_id, message, recipient_dept_id, source_key) VALUES (?, ?, ?, ?) ON CONFLICT (source_key) WHERE source_key IS NOT NULL DO NOTHING', params: [id, message, 1, `purchase_late:${id}:${stageKey}:dept:1`] },
+        { sql: 'INSERT INTO notifications (order_id, message, recipient_role, source_key) VALUES (?, ?, ?, ?) ON CONFLICT (source_key) WHERE source_key IS NOT NULL DO NOTHING', params: [id, message, 'management', `purchase_late:${id}:${stageKey}:role:management`] }
+      ];
+      for (const n of notices) {
+        try {
+          await db.prepare(n.sql).run(...n.params);
+          sendBusinessWebhook(message);
+        } catch (e) {
+          console.error(JSON.stringify({
+            ts: new Date().toISOString(),
+            level: 'error',
+            message: '采购到货预警通知写入失败',
+            orderId: id,
+            stageKey,
+            error: e.message
+          }));
+        }
+      }
+    }
+  }
+
+  return { status: 200, body: { message: '时间更新成功', warnings } };
 }
 
 async function syncMaterialInPlanned(db, orderId) {

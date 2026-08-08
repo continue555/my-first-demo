@@ -298,6 +298,63 @@ async function getOrderId(page, orderNo) {
     }
   });
 
+  await check('follow-up completion records arrival notes', async () => {
+    const noteNo = 'E2E-NOTE-' + Date.now();
+    const create = await page.evaluate(async no => {
+      const csrf = decodeURIComponent((document.cookie.match(/(?:^|; )csrf=([^;]*)/) || [])[1] || '');
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+        body: JSON.stringify({ order_no: no, planned_delivery_date: '2026-08-30' })
+      });
+      return { status: res.status, body: await res.json() };
+    }, noteNo);
+    if (create.status !== 201) throw new Error('note order create failed');
+    const noteId = create.body.orderId;
+    try {
+      await page.evaluate(async id => {
+        const csrf = decodeURIComponent((document.cookie.match(/(?:^|; )csrf=([^;]*)/) || [])[1] || '');
+        const put = async (path, body) => {
+          const res = await fetch('/api/orders/' + id + path, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+            body: JSON.stringify(body)
+          });
+          if (!res.ok) throw new Error('advance failed: ' + path + ' ' + res.status);
+        };
+        const stages = ['contract_sign', 'deposit_confirm', 'manufacturing_approval', 'gm_sign', 'production_order', 'technical_design', 'purchase_plan', 'purchase_frame'];
+        for (const key of stages) {
+          await put('/stages/' + key + '/time', { start_date: '2026-08-01', planned_end_date: '2026-08-02' });
+          await put('/stages/' + key, { status: 'in_progress' });
+          await put('/stages/' + key, { status: 'completed' });
+        }
+        await put('/stages/frame_follow_up', { status: 'in_progress' });
+      }, noteId);
+
+      await page.goto(BASE + '/orders/' + noteId, { waitUntil: 'domcontentloaded', timeout: 45000 });
+      await page.waitForSelector('.detail-grid', { timeout: 30000 });
+      const followItem = page.locator('.stage-item.sub-stage', { hasText: '机架采购跟进' });
+      await followItem.locator('button', { hasText: '完成' }).click();
+      const arrivalModal = page.locator('.modal-overlay .modal', { hasText: '实际到货说明' });
+      await arrivalModal.waitFor({ timeout: 10000 });
+      await arrivalModal.locator('textarea').fill('部分到货 2/5');
+      await arrivalModal.locator('.modal-actions .btn-primary').click();
+      await page.waitForFunction(() => !document.querySelector('.modal-overlay'), null, { timeout: 10000 });
+      await page.waitForFunction(
+        () => [...document.querySelectorAll('.stage-item.sub-stage')].some(el =>
+          el.textContent.includes('机架采购跟进') && el.textContent.includes('到货说明') && el.textContent.includes('部分到货 2/5')
+        ),
+        null,
+        { timeout: 15000 }
+      );
+    } finally {
+      await page.evaluate(async id => {
+        const csrf = decodeURIComponent((document.cookie.match(/(?:^|; )csrf=([^;]*)/) || [])[1] || '');
+        await fetch('/api/orders/' + id, { method: 'DELETE', headers: { 'X-CSRF-Token': csrf } });
+      }, noteId).catch(() => {});
+    }
+  });
+
   await check('overdue badge shown on orders list, detail and todos', async () => {
     const overdueNo = 'E2E-OVERDUE-' + Date.now();
     await page.goto(BASE + '/orders', { waitUntil: 'domcontentloaded', timeout: 45000 });

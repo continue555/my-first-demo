@@ -550,6 +550,28 @@ async function main() {
       ? {}
       : { error: "order date not cleared: " + JSON.stringify(stage) };
   });
+  await test("Purchase planned after delivery warns", async () => {
+    const timeRes = await req("PUT", `/api/orders/${createdOrderId}/stages/purchase_frame/time`, { planned_end_date: "2026-08-20" });
+    return timeRes.status === 200 && Array.isArray(timeRes.body.warnings) && timeRes.body.warnings.some(w => w.includes("晚于订单计划交货日期"))
+      ? {}
+      : { error: "late purchase warning missing: " + JSON.stringify(timeRes.body) };
+  });
+  await test("Responsible user can correct actual end date", async () => {
+    const set = await req("PUT", `/api/orders/${createdOrderId}/stages/purchase_frame/time`, { start_date: "2026-08-01", planned_end_date: "2026-08-02" });
+    if (set.status !== 200) return { error: "time set failed: " + JSON.stringify(set.body) };
+    const oldToken = token;
+    await loginUser("caigou1", "123456");
+    const corrected = await req("PUT", `/api/orders/${createdOrderId}/stages/purchase_frame/time`, { actual_end_date: "2026-08-03" });
+    token = oldToken;
+    return corrected.status === 200 ? {} : { error: "actual end correction failed: " + JSON.stringify(corrected.body) };
+  });
+  await test("Foreign user cannot correct actual end date", async () => {
+    const oldToken = token;
+    await loginUser("jishu1", "123456");
+    const r = await req("PUT", `/api/orders/${createdOrderId}/stages/purchase_frame/time`, { actual_end_date: "2026-08-03" });
+    token = oldToken;
+    return r.status === 403 ? {} : { error: "expected 403, got " + r.status };
+  });
   await test("Missing notification read returns 404", async () => {
     const r = await req("PUT", "/api/notifications/999999/read");
     return r.status === 404 ? {} : { error: "expected 404, got " + r.status };

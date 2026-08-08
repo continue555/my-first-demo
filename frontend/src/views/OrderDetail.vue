@@ -121,6 +121,7 @@
                       <span v-if="ps.actual_end_date"> | <span :class="getOverdueInfo(ps)?.cssClass">{{ isFollowUpStage(ps) ? '实际到货时间: ' + fmtDate(ps.actual_end_date) : '实际完成: ' + fmtDate(ps.actual_end_date) }}</span></span>
                     </template>
                     <span v-if="ps.operator_name"> | 操作人: {{ ps.operator_name }}</span>
+                    <span v-if="ps.notes && isFollowUpStage(ps)"> | 到货说明: {{ ps.notes }}</span>
                   </div>
                 </div>
                 <span class="status-badge" :class="getOverdueInfo(ps)?.cssClass === 'overdue-red' && ps.status === 'completed' ? 'status-overdue-completed' : 'status-' + ps.status">
@@ -150,6 +151,7 @@
         <h3>设置时间 - {{ timeModal.stageName }}</h3>
         <div v-if="!timeModal.hideStart" class="form-group"><label>开始日期</label><input v-model="timeModal.startDate" type="date"></div>
         <div v-if="timeModal.isPurchase" class="form-group"><label>下单时间</label><input v-model="timeModal.orderDate" type="date"></div>
+        <div v-if="timeModal.showActualEnd" class="form-group"><label>实际完成日期</label><input v-model="timeModal.actualEndDate" type="date"></div>
         <div class="form-group">
           <label>{{ timeModal.isPurchase ? '计划到货日期' : '计划完成日期' }}</label>
           <input v-model="timeModal.plannedEnd" type="date">
@@ -157,6 +159,18 @@
         <div class="modal-actions">
           <button class="btn btn-outline" @click="timeModal.visible = false">取消</button>
           <button class="btn btn-primary" @click="saveTime">保存</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 到货说明弹窗 -->
+    <div v-if="arrivalModal.visible" class="modal-overlay" @click.self="arrivalModal.visible = false">
+      <div class="modal">
+        <h3>确认完成 - {{ arrivalModal.stage?.stage_name }}</h3>
+        <div class="form-group"><label>实际到货说明（可选，支持分批到货）</label><textarea v-model="arrivalModal.notes" rows="3" style="width:100%;"></textarea></div>
+        <div class="modal-actions">
+          <button class="btn btn-outline" @click="arrivalModal.visible = false">取消</button>
+          <button class="btn btn-primary" @click="confirmArrivalComplete">确认完成</button>
         </div>
       </div>
     </div>
@@ -213,7 +227,8 @@ const stages = ref([]);
 const loading = ref(true);
 const loadError = ref('');
 
-const timeModal = ref({ visible: false, orderId: null, stageKey: '', stageName: '', startDate: '', plannedEnd: '', orderDate: '' });
+const timeModal = ref({ visible: false, orderId: null, stageKey: '', stageName: '', startDate: '', plannedEnd: '', orderDate: '', actualEndDate: '', showActualEnd: false });
+const arrivalModal = ref({ visible: false, stage: null, notes: '' });
 const files = ref([]);
 const uploading = ref(false);
 const uploadProgress = ref(0);
@@ -520,9 +535,11 @@ function formatSize(bytes) {
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
 
-async function doUpdateStage(stage, status) {
+async function doUpdateStage(stage, status, notes) {
   try {
-    await api.put(`/orders/${order.value.id}/stages/${stage.stage_key}`, { status });
+    const payload = { status };
+    if (notes !== undefined) payload.notes = notes;
+    await api.put(`/orders/${order.value.id}/stages/${stage.stage_key}`, payload);
     toast.show('流程状态更新成功');
     load();
   } catch (e) {
@@ -540,6 +557,10 @@ async function updateStage(stage, status) {
     return;
   }
   if (status === 'completed') {
+    if (isFollowUpStage(stage)) {
+      openArrivalComplete(stage);
+      return;
+    }
     modal.open({
       title: '确认完成',
       content: '<p style="margin:16px 0;color:var(--text-secondary);">确定要完成该流程节点吗？完成后不可直接回退。</p>',
@@ -551,11 +572,24 @@ async function updateStage(stage, status) {
   await doUpdateStage(stage, status);
 }
 
+function openArrivalComplete(stage) {
+  arrivalModal.value = { visible: true, stage, notes: stage.notes || '' };
+}
+
+async function confirmArrivalComplete() {
+  const stage = arrivalModal.value.stage;
+  const notes = (arrivalModal.value.notes || '').trim();
+  arrivalModal.value.visible = false;
+  await doUpdateStage(stage, 'completed', notes);
+}
+
 function showTimeModal(stage) {
   timeModal.value = {
     visible: true, orderId: order.value.id, stageKey: stage.stage_key,
     stageName: stage.stage_name, startDate: stage.start_date || '', plannedEnd: stage.planned_end_date || '',
     orderDate: stage.order_date || '',
+    actualEndDate: stage.actual_end_date || '',
+    showActualEnd: stage.status !== 'pending' && (auth.isAdmin || auth.isManagement || auth.canOperateStage(stage)),
     isPurchase: isPurchaseStage(stage),
     hideStart: stage.stage_key !== 'contract_sign'
   };
@@ -570,10 +604,12 @@ function canSetTime(stage) {
 
 async function saveTime() {
   try {
-    const data = await api.put(`/orders/${timeModal.value.orderId}/stages/${timeModal.value.stageKey}/time`, {
+    const body = {
       start_date: timeModal.value.startDate, planned_end_date: timeModal.value.plannedEnd,
       order_date: timeModal.value.orderDate || null
-    });
+    };
+    if (timeModal.value.showActualEnd) body.actual_end_date = timeModal.value.actualEndDate || null;
+    const data = await api.put(`/orders/${timeModal.value.orderId}/stages/${timeModal.value.stageKey}/time`, body);
     toast.show('时间更新成功');
     if (data.warnings && data.warnings.length > 0) {
       for (const w of data.warnings) toast.show(w, 'error');
