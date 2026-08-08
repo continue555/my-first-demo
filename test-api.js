@@ -93,6 +93,12 @@ async function main() {
 
   const login = await loginUser("admin", "123456");
   await test("Login", async () => login.body.user ? {} : { error: "login failed" });
+  await test("Wrong password returns friendly error", async () => {
+    const oldToken = token;
+    const r = await req("POST", "/api/auth/login", { username: "admin", password: "wrong-password" });
+    token = oldToken;
+    return r.status === 401 && r.body.error === "用户名或密码错误" ? {} : { error: "expected 401 friendly error, got " + r.status + " " + JSON.stringify(r.body) };
+  });
   await test("Login response hides token", async () => { const r = await loginUser("admin", "123456"); return !("token" in r.body) ? {} : { error: "token still returned" }; });
   await test("Logout revokes token", async () => {
     const login = await loginUser("admin", "123456");
