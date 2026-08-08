@@ -492,10 +492,6 @@ async function updateStageTime(user, id, stageKey, body) {
       UPDATE process_stages SET status = 'in_progress', actual_end_date = NULL, operator_id = ?, operator_name = ?, updated_at = datetime('now', '+8 hours')
       WHERE order_id = ? AND stage_key = ?
     `).run(user.id, user.name, id, stageKey);
-    await db.prepare(`
-      UPDATE orders SET status = 'in_progress', updated_at = datetime('now', '+8 hours')
-      WHERE id = ? AND status = 'completed'
-    `).run(id);
     await logAudit(user.id, user.name, '撤回完成', 'order_stage', parseInt(id), `订单: ${order?.order_no || id}, 阶段: ${stage.stage_name}, 清空实际完成日期`);
     return { status: 200, body: { message: '已撤回完成，节点回到进行中' } };
   }

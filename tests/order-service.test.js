@@ -411,8 +411,8 @@ test('clearing actual end rolls back completed stage when order not completed', 
     assert.ok(r.body.message.includes('撤回'));
     const stageUpdate = fake.runs.find(x => x.sql.includes("status = 'in_progress'") && x.sql.includes('process_stages'));
     assert.ok(stageUpdate);
-    const orderUpdate = fake.runs.find(x => x.sql.includes("status = 'in_progress'") && x.sql.includes('UPDATE orders'));
-    assert.ok(orderUpdate);
+    const orderStatusChange = fake.runs.find(x => x.sql.includes('UPDATE orders') && x.sql.includes("status = 'in_progress'"));
+    assert.ok(!orderStatusChange);
   } finally {
     database.getDb = original;
   }
